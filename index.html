@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- ============================================ -->
+    <!-- FAVICONS -->
+    <!-- ============================================ -->
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- ============================================ -->
+    <!-- SEO PRIMAIRE -->
+    <!-- ============================================ -->
+    <title>FasoGaz – Commandez votre gaz à Ouagadougou et Bobo-Dioulasso</title>
+    <meta name="description" content="FasoGaz est la plateforme burkinabè pour localiser et commander votre gaz domestique. Trouvez les dépôts les plus proches à Ouagadougou et Bobo-Dioulasso, commandez en ligne et recevez chez vous." />
+    <meta name="keywords" content="gaz Burkina Faso, commande gaz Ouagadougou, gaz Bobo-Dioulasso, livraison gaz domicile, dépôt gaz, bouteille gaz, FasoGaz, gaz domestique Burkina" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="FasoGaz" />
+    <link rel="canonical" href="https://fasogaz-frontend.onrender.com/" />
+
+    <!-- ============================================ -->
+    <!-- OPEN GRAPH -->
+    <!-- ============================================ -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FasoGaz" />
+    <meta property="og:locale" content="fr_BF" />
+    <meta property="og:url" content="fasogaz-frontend.onrender.com/" />
+    <meta property="og:title" content="FasoGaz – Votre gaz à portée de clic" />
+    <meta property="og:description" content="Localisez et commandez votre gaz domestique facilement à Ouagadougou et Bobo-Dioulasso. Service rapide, 100% sécurisé, plateforme 100% burkinabè." />
+    <meta property="og:image" content="https://fasogaz-frontend.onrender.com/icons/icon-512x512.png" />
+    <meta property="og:image:alt" content="FasoGaz – Plateforme de commande de gaz au Burkina Faso" />
+
+    <!-- ============================================ -->
+    <!-- TWITTER CARD -->
+    <!-- ============================================ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="FasoGaz – Votre gaz à portée de clic" />
+    <meta name="twitter:description" content="Localisez et commandez votre gaz domestique facilement à Ouagadougou et Bobo-Dioulasso." />
+    <meta name="twitter:image" content="fasogaz-frontend.onrender.com/icons/icon-512x512.png" />
+    <meta name="twitter:image:alt" content="FasoGaz – Plateforme de commande de gaz au Burkina Faso" />
+
+    <!-- ============================================ -->
+    <!-- DONNÉES STRUCTURÉES Schema.org -->
+    <!-- ============================================ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://fasogaz-frontend.onrender.com/#website",
+          "url": "https://fasogaz-frontend.onrender.com",
+          "name": "FasoGaz",
+          "description": "Plateforme burkinabè de géolocalisation et commande de gaz domestique",
+          "inLanguage": "fr",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://fasogaz-frontend.onrender.com/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://fasogaz-frontend.onrender.com/#app",
+          "name": "FasoGaz",
+          "url": "https://fasogaz-frontend.onrender.com",
+          "description": "Localisez et commandez votre gaz domestique à Ouagadougou et Bobo-Dioulasso.",
+          "applicationCategory": "LifestyleApplication",
+          "operatingSystem": "Web, Android, iOS",
+          "inLanguage": "fr",
+          "isAccessibleForFree": true,
+          "offers": {
+            "@type": "Offer",
+            "priceCurrency": "XOF",
+            "description": "Accès à la plateforme via abonnement 24h pour les clients"
+          },
+          "areaServed": [
+            {
+              "@type": "City",
+              "name": "Ouagadougou",
+              "containedInPlace": { "@type": "Country", "name": "Burkina Faso" }
+            },
+            {
+              "@type": "City",
+              "name": "Bobo-Dioulasso",
+              "containedInPlace": { "@type": "Country", "name": "Burkina Faso" }
+            }
+          ],
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "fasogaz26@gmail.com",
+            "contactType": "customer service",
+            "availableLanguage": "fr"
+          },
+          "publisher": {
+            "@type": "Organization",
+            "name": "FasoGaz",
+            "url": "https://fasogaz-frontend.onrender.com",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://fasogaz-frontend.onrender.com/icons/icon-512x512.png"
+            }
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://fasogaz-frontend.onrender.com/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Comment commander du gaz avec FasoGaz ?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Créez un compte gratuit, ouvrez la carte interactive pour trouver les dépôts proches de chez vous, sélectionnez un revendeur et passez votre commande en quelques clics."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "FasoGaz est disponible dans quelles villes ?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "FasoGaz est actuellement disponible à Ouagadougou et à Bobo-Dioulasso au Burkina Faso."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Comment devenir revendeur partenaire FasoGaz ?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "L'inscription en tant que revendeur se fait via un lien d'invitation fourni par un agent commercial FasoGaz."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "L'inscription à FasoGaz est-elle gratuite ?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Oui, l'inscription et l'utilisation de FasoGaz sont entièrement gratuites pour les clients."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <!-- ============================================ -->
+    <!-- PWA                                          -->
+    <!-- Fond noir = même couleur que splash natif   -->
+    <!-- → transition invisible avec notre animation -->
+    <!-- ============================================ -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="FasoGaz" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- ============================================ -->
+    <!-- POLICES                                      -->
+    <!-- ============================================ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;600&display=swap" rel="stylesheet" />
+
+    <!-- ============================================ -->
+    <!-- SPLASH SCREEN — HTML pur, avant React        -->
+    <!-- ============================================ -->
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      /* Corps noir immédiat — correspond au splash natif Android/iOS */
+      body { background: #0a0a0a; }
+
+      /* ── Wrapper ────────────────────────────────────── */
+      #fg-splash {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 99999;
+        display: -webkit-flex;
+        display: flex;
+        -webkit-flex-direction: column;
+        flex-direction: column;
+        -webkit-align-items: center;
+        align-items: center;
+        -webkit-justify-content: center;
+        justify-content: center;
+        overflow: hidden;
+        /* Démarre noir comme le splash natif */
+        background: #0a0a0a;
+        -webkit-transition: opacity 0.55s ease, -webkit-transform 0.55s ease;
+        transition: opacity 0.55s ease, transform 0.55s ease;
+      }
+      #fg-splash.fg-exit {
+        opacity: 0;
+        -webkit-transform: scale(1.04);
+        transform: scale(1.04);
+        pointer-events: none;
+      }
+      #fg-splash.fg-gone { display: none; }
+
+      /* Dégradé rouge qui apparaît progressivement après le fond noir */
+      #fg-splash::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: -webkit-linear-gradient(250deg, #b91c1c 0%, #1a0000 55%, #0a0a0a 100%);
+        background: linear-gradient(160deg, #b91c1c 0%, #1a0000 55%, #0a0a0a 100%);
+        opacity: 0;
+        -webkit-animation: fg-bg-reveal 0.9s 0.2s ease forwards;
+        animation: fg-bg-reveal 0.9s 0.2s ease forwards;
+        pointer-events: none;
+        z-index: 0;
+      }
+      @-webkit-keyframes fg-bg-reveal {
+        from { opacity: 0; } to { opacity: 1; }
+      }
+      @keyframes fg-bg-reveal {
+        from { opacity: 0; } to { opacity: 1; }
+      }
+
+      /* Grain texture */
+      #fg-splash::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+        background-size: 180px;
+        opacity: 0.3;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      /* Tous les enfants au-dessus du pseudo-élément ::after */
+      #fg-splash > * { position: relative; z-index: 1; }
+
+      /* ── Glow ───────────────────────────────────────── */
+      .fg-glow {
+        position: absolute;
+        width: 380px; height: 380px;
+        border-radius: 50%;
+        background: -webkit-radial-gradient(circle, rgba(220,38,38,.35) 0%, transparent 70%);
+        background: radial-gradient(circle, rgba(220,38,38,.35) 0%, transparent 70%);
+        top: 50%; left: 50%;
+        -webkit-transform: translate(-50%, -60%);
+        transform: translate(-50%, -60%);
+        -webkit-animation: fg-pulse 2.4s ease-in-out infinite;
+        animation: fg-pulse 2.4s ease-in-out infinite;
+        z-index: 1;
+      }
+      @-webkit-keyframes fg-pulse {
+        0%,100% { opacity:.5; -webkit-transform:translate(-50%,-60%) scale(1); }
+        50%      { opacity:1;  -webkit-transform:translate(-50%,-60%) scale(1.1); }
+      }
+      @keyframes fg-pulse {
+        0%,100% { opacity:.5; transform:translate(-50%,-60%) scale(1); }
+        50%      { opacity:1;  transform:translate(-50%,-60%) scale(1.1); }
+      }
+
+      /* ── Particules ─────────────────────────────────── */
+      .fg-particles { position:absolute; top:0;left:0;right:0;bottom:0; pointer-events:none; overflow:hidden; z-index:1; }
+      .fg-particle {
+        position: absolute;
+        border-radius: 50%;
+        opacity: 0;
+        -webkit-animation: fg-float linear infinite;
+        animation: fg-float linear infinite;
+      }
+      @-webkit-keyframes fg-float {
+        0%   { -webkit-transform:translateY(0) scale(1);       opacity:0; }
+        15%  { opacity:.8; }
+        80%  { opacity:.3; }
+        100% { -webkit-transform:translateY(-320px) scale(.3);  opacity:0; }
+      }
+      @keyframes fg-float {
+        0%   { transform:translateY(0) scale(1);      opacity:0; }
+        15%  { opacity:.8; }
+        80%  { opacity:.3; }
+        100% { transform:translateY(-320px) scale(.3); opacity:0; }
+      }
+
+      /* ── Ring ───────────────────────────────────────── */
+      .fg-ring {
+        position: relative;
+        width: 148px; height: 148px;
+        flex-shrink: 0;
+        -webkit-animation: fg-rise 0.8s ease-out forwards;
+        animation: fg-rise 0.8s ease-out forwards;
+        will-change: transform, opacity;
+      }
+      @-webkit-keyframes fg-rise {
+        from { opacity:0; -webkit-transform:translateY(24px) scale(.88); }
+        to   { opacity:1; -webkit-transform:translateY(0) scale(1); }
+      }
+      @keyframes fg-rise {
+        from { opacity:0; transform:translateY(24px) scale(.88); }
+        to   { opacity:1; transform:translateY(0) scale(1); }
+      }
+      .fg-ring-svg {
+        position:absolute; top:0;left:0;right:0;bottom:0;
+        width:100%; height:100%;
+        -webkit-animation: fg-spin 6s linear infinite;
+        animation: fg-spin 6s linear infinite;
+        will-change: transform;
+      }
+      @-webkit-keyframes fg-spin { to { -webkit-transform:rotate(360deg); } }
+      @keyframes fg-spin          { to { transform:rotate(360deg); } }
+
+      /* ── Logo ───────────────────────────────────────── */
+      .fg-logo {
+        position: absolute;
+        top: 50%; left: 50%;
+        -webkit-transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%);
+        width: 104px; height: 104px;
+        object-fit: contain;
+        -webkit-filter: drop-shadow(0 0 12px rgba(220,38,38,.7));
+        filter: drop-shadow(0 0 12px rgba(220,38,38,.7));
+      }
+
+      /* ── Texte ──────────────────────────────────────── */
+      .fg-text {
+        text-align: center;
+        margin-top: 28px;
+        -webkit-animation: fg-fadein 0.7s 0.45s ease-out forwards;
+        animation: fg-fadein 0.7s 0.45s ease-out forwards;
+        opacity: 0;
+      }
+      @-webkit-keyframes fg-fadein {
+        from { opacity:0; -webkit-transform:translateY(12px); }
+        to   { opacity:1; -webkit-transform:translateY(0); }
+      }
+      @keyframes fg-fadein {
+        from { opacity:0; transform:translateY(12px); }
+        to   { opacity:1; transform:translateY(0); }
+      }
+
+      .fg-brand {
+        font-family: 'Bebas Neue', 'Impact', sans-serif;
+        font-size: clamp(52px, 14vw, 72px);
+        letter-spacing: .06em;
+        line-height: 1;
+        color: #fff;
+        text-shadow: 0 0 28px rgba(220,38,38,.6), 0 2px 0 rgba(0,0,0,.5);
+      }
+      .fg-brand-accent {
+        color: #fbbf24;
+        text-shadow: 0 0 22px rgba(251,191,36,.5);
+      }
+      .fg-tagline {
+        font-family: 'Outfit', sans-serif;
+        font-weight: 300;
+        font-size: clamp(12px, 3vw, 14px);
+        letter-spacing: .2em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,.5);
+        margin-top: 6px;
+      }
+      .fg-divider {
+        width: 56px; height: 2px;
+        margin: 16px auto 0;
+        background: -webkit-linear-gradient(left, transparent, #f97316, transparent);
+        background: linear-gradient(90deg, transparent, #f97316, transparent);
+        -webkit-animation: fg-fadein 0.7s 0.7s ease-out forwards;
+        animation: fg-fadein 0.7s 0.7s ease-out forwards;
+        opacity: 0;
+      }
+
+      /* ── Barre de chargement ────────────────────────── */
+      .fg-bar-wrap {
+        margin-top: 36px;
+        width: clamp(160px, 55vw, 210px);
+        height: 3px;
+        border-radius: 99px;
+        background: rgba(255,255,255,.1);
+        overflow: hidden;
+        -webkit-animation: fg-fadein 0.5s 0.75s ease-out forwards;
+        animation: fg-fadein 0.5s 0.75s ease-out forwards;
+        opacity: 0;
+      }
+      .fg-bar {
+        height: 100%;
+        border-radius: 99px;
+        background: -webkit-linear-gradient(left, #f97316, #fbbf24);
+        background: linear-gradient(90deg, #f97316, #fbbf24);
+        -webkit-transform-origin: left;
+        transform-origin: left;
+        -webkit-transform: scaleX(0);
+        transform: scaleX(0);
+        -webkit-animation: fg-load 2.3s ease 0.35s forwards;
+        animation: fg-load 2.3s ease 0.35s forwards;
+        will-change: transform;
+      }
+      @-webkit-keyframes fg-load {
+        from { -webkit-transform:scaleX(0); }
+        to   { -webkit-transform:scaleX(1); }
+      }
+      @keyframes fg-load {
+        from { transform:scaleX(0); }
+        to   { transform:scaleX(1); }
+      }
+
+      /* ── Mention bas ────────────────────────────────── */
+      .fg-bottom {
+        position: absolute;
+        bottom: 32px;
+        font-family: 'Outfit', sans-serif;
+        font-size: 10px;
+        letter-spacing: .2em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,.18);
+        -webkit-animation: fg-fadein 1s 1.1s ease-out forwards;
+        animation: fg-fadein 1s 1.1s ease-out forwards;
+        opacity: 0;
+      }
+
+      /* ── Fallback reduced-motion ────────────────────── */
+      @media (prefers-reduced-motion: reduce) {
+        .fg-ring, .fg-text, .fg-divider, .fg-bar-wrap, .fg-bottom {
+          opacity: 1 !important;
+          -webkit-animation: none !important;
+          animation: none !important;
+          -webkit-transform: none !important;
+          transform: none !important;
+        }
+        .fg-bar {
+          -webkit-transform: scaleX(1) !important;
+          transform: scaleX(1) !important;
+        }
+        #fg-splash::after { opacity: 1 !important; -webkit-animation: none !important; animation: none !important; }
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <!-- =============================================
+         SPLASH — affiché avant React
+         ============================================= -->
+    <div id="fg-splash">
+
+      <div class="fg-glow"></div>
+      <div class="fg-particles" id="fg-particles"></div>
+
+      <!-- Logo + anneau -->
+      <div class="fg-ring">
+        <svg class="fg-ring-svg" viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="74" cy="74" r="70"
+            stroke="url(#rg)" stroke-width="2.5"
+            stroke-dasharray="6 10" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="rg" x1="0" y1="0" x2="148" y2="148" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stop-color="#f97316"/>
+              <stop offset="50%"  stop-color="#fbbf24"/>
+              <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <img class="fg-logo" src="/icons/icon-192x192.png" alt="FasoGaz" />
+      </div>
+
+      <!-- Nom + slogan -->
+      <div class="fg-text">
+        <div class="fg-brand">Faso<span class="fg-brand-accent">Gaz</span></div>
+        <div class="fg-tagline">Votre gaz à portée de clic</div>
+        <div class="fg-divider"></div>
+      </div>
+
+      <!-- Barre de progression -->
+      <div class="fg-bar-wrap"><div class="fg-bar"></div></div>
+
+      <div class="fg-bottom">Burkina Faso · 100% local</div>
+    </div>
+
+    <!-- Point de montage React -->
+    <div id="root"></div>
+
+    <!-- Script splash -->
+    <script>
+      (function () {
+        var container = document.getElementById('fg-particles');
+        var colors = ['#f97316', '#fbbf24', '#ef4444'];
+
+        // Génère les particules
+        for (var i = 0; i < 14; i++) {
+          var p = document.createElement('div');
+          p.className = 'fg-particle';
+          var size = (3 + Math.random() * 4).toFixed(1);
+          var dur  = (2 + Math.random() * 2.5).toFixed(2);
+          var del  = (Math.random() * 1.8).toFixed(2);
+          p.style.cssText = [
+            'width:'  + size + 'px',
+            'height:' + size + 'px',
+            'left:'   + (20 + Math.random() * 60).toFixed(1) + '%',
+            'bottom:' + (28 + Math.random() * 22).toFixed(1) + '%',
+            'background:' + colors[Math.floor(Math.random() * colors.length)],
+            '-webkit-animation-duration:' + dur + 's',
+            'animation-duration:'         + dur + 's',
+            '-webkit-animation-delay:'    + del + 's',
+            'animation-delay:'            + del + 's',
+          ].join(';');
+          container.appendChild(p);
+        }
+
+        // Force reflow → déclenche les animations sur mobile
+        var splash = document.getElementById('fg-splash');
+        splash.style.display = 'none';
+        void splash.offsetHeight;
+        splash.style.display = '';
+
+        // Fonction de fermeture appelée par App.jsx
+        window.__FG_HIDE_SPLASH__ = function () {
+          var el = document.getElementById('fg-splash');
+          if (!el || el.classList.contains('fg-exit')) return;
+          el.classList.add('fg-exit');
+          setTimeout(function () { el.classList.add('fg-gone'); }, 600);
+        };
+
+        // Sécurité : fermeture auto après 5s max
+        setTimeout(function () {
+          if (window.__FG_HIDE_SPLASH__) window.__FG_HIDE_SPLASH__();
+        }, 5000);
+      })();
+    </script>
+
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
