@@ -1,7 +1,7 @@
 // ==========================================
 // FICHIER: src/api/accessService.js
 // Services API pour vérifier l'accès utilisateur
-// ==========================================
+
 
 export const accessService = {
   /**
