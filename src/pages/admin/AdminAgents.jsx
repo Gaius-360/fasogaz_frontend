@@ -296,6 +296,9 @@ const AdminAgents = () => {
     'Bobo-Dioulasso'
   ];
 
+  // ✅ FIX: Suppression des espaces dans le numéro de téléphone
+  const sanitizePhone = (value) => value.replace(/\s/g, '');
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -559,11 +562,13 @@ const AdminAgents = () => {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => {
-                    let value = e.target.value;
-                    if (!value.startsWith('+226')) {
-                      value = '+226';
+                    // ✅ FIX: Suppression des espaces
+                    const sanitized = sanitizePhone(e.target.value);
+                    if (!sanitized.startsWith('+226')) {
+                      setFormData({ ...formData, phone: '+226' });
+                    } else {
+                      setFormData({ ...formData, phone: sanitized });
                     }
-                    setFormData({ ...formData, phone: value });
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required

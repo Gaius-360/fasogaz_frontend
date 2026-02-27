@@ -29,14 +29,18 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState(null);
 
+  // ✅ FIX: Suppression des espaces dans le numéro de téléphone
+  const sanitizePhone = (value) => value.replace(/\s/g, '');
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
     if (name === 'phone') {
-      if (!value.startsWith('+226')) {
+      const sanitized = sanitizePhone(value);
+      if (!sanitized.startsWith('+226')) {
         setFormData(prev => ({ ...prev, phone: '+226' }));
       } else {
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => ({ ...prev, [name]: sanitized }));
       }
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));

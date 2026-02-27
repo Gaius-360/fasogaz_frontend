@@ -1,7 +1,7 @@
 // ==========================================
 // FICHIER: src/components/seller/ProductFormModal.jsx
 // ==========================================
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
 import Button from '../common/Button';
 import Input from '../common/Input';
@@ -24,13 +24,17 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
   };
 
-  // ✅ Filtre strict : n'autorise que les chiffres 0-9, aucun séparateur possible
   const handlePriceChange = (e) => {
     const onlyDigits = e.target.value.replace(/[^0-9]/g, '');
     setFormData(prev => ({ ...prev, price: onlyDigits }));
@@ -64,14 +68,11 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
         : await sellerService.createProduct(productData);
 
       if (response.success) {
-        setAlert({ 
-          type: 'success', 
-          message: isEdit ? 'Produit mis à jour' : 'Produit créé avec succès' 
+        setAlert({
+          type: 'success',
+          message: isEdit ? 'Produit mis à jour' : 'Produit créé avec succès'
         });
-        setTimeout(() => {
-          onSuccess();
-          onClose();
-        }, 1000);
+        setTimeout(() => { onSuccess(); onClose(); }, 1000);
       }
     } catch (error) {
       setAlert({
@@ -84,23 +85,27 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
-        
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl overflow-hidden">
+
         {/* Header */}
-        <div className="gradient-gazbf p-6">
-          <button 
-            onClick={onClose} 
-            className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white"
+        <div className="gradient-gazbf p-5 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white"
           >
             <X className="h-5 w-5" />
           </button>
           <div className="text-white">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-1">
               <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
                 <Package className="h-6 w-6" />
               </div>
-              <h2 className="text-2xl font-bold">
+              <h2 className="text-xl font-bold">
                 {isEdit ? 'Modifier le produit' : 'Nouveau produit'}
               </h2>
             </div>
@@ -110,15 +115,10 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Body scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
           {alert && (
-            <Alert 
-              type={alert.type} 
-              message={alert.message} 
-              onClose={() => setAlert(null)} 
-              className="mb-4" 
-            />
+            <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-2" />
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -138,9 +138,7 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
                   <option key={type.value} value={type.value}>{type.label}</option>
                 ))}
               </select>
-              {isEdit && (
-                <p className="text-xs text-neutral-500 mt-2">⚠️ Le type ne peut pas être modifié</p>
-              )}
+              {isEdit && <p className="text-xs text-neutral-500 mt-2">⚠️ Le type ne peut pas être modifié</p>}
             </div>
 
             {/* Marque */}
@@ -159,12 +157,10 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
                   <option key={brand.value} value={brand.value}>{brand.label}</option>
                 ))}
               </select>
-              {isEdit && (
-                <p className="text-xs text-neutral-500 mt-2">⚠️ La marque ne peut pas être modifiée</p>
-              )}
+              {isEdit && <p className="text-xs text-neutral-500 mt-2">⚠️ La marque ne peut pas être modifiée</p>}
             </div>
 
-            {/* ✅ Prix — champ texte filtré, seuls les chiffres passent */}
+            {/* Prix */}
             <div>
               <label className="block text-sm font-bold text-neutral-900 mb-2">
                 Prix unitaire (FCFA) <span className="text-primary-600">*</span>
@@ -181,9 +177,7 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
                   errors.price ? 'border-red-400' : 'border-neutral-200'
                 }`}
               />
-              {errors.price && (
-                <p className="text-xs text-red-500 mt-1">{errors.price}</p>
-              )}
+              {errors.price && <p className="text-xs text-red-500 mt-1">{errors.price}</p>}
             </div>
 
             {/* Quantité */}
@@ -203,15 +197,18 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t-2 border-neutral-100 bg-neutral-50">
+        <div
+          className="p-5 border-t-2 border-neutral-100 bg-neutral-50 flex-shrink-0"
+          style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+        >
           <div className="flex gap-3">
             <Button variant="outline" onClick={onClose} disabled={loading}>
               Annuler
             </Button>
-            <Button 
-              variant="gradient" 
-              fullWidth 
-              loading={loading} 
+            <Button
+              variant="gradient"
+              fullWidth
+              loading={loading}
               onClick={handleSubmit}
               className="h-12 text-base font-bold shadow-gazbf-lg"
             >

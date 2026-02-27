@@ -32,6 +32,11 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
     if (formData.latitude && formData.longitude) {
       setHasGPS(true);
     }
+    // Empêche le scroll du body quand le modal est ouvert
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, []);
 
   const handleChange = (e) => {
@@ -45,27 +50,17 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
   const handleGetLocation = async () => {
     setGettingLocation(true);
     setAlert(null);
-
     try {
       const position = await getCurrentPosition();
-      
       setFormData(prev => ({
         ...prev,
         latitude: position.latitude,
         longitude: position.longitude
       }));
-
       setHasGPS(true);
-
-      setAlert({
-        type: 'success',
-        message: `Position GPS obtenue avec succès !`
-      });
+      setAlert({ type: 'success', message: 'Position GPS obtenue avec succès !' });
     } catch (error) {
-      setAlert({
-        type: 'error',
-        message: error.message || 'Impossible d\'obtenir votre position GPS'
-      });
+      setAlert({ type: 'error', message: error.message || 'Impossible d\'obtenir votre position GPS' });
     } finally {
       setGettingLocation(false);
     }
@@ -73,110 +68,120 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!formData.label) {
-      setAlert({
-        type: 'error',
-        message: 'Le nom de l\'adresse est obligatoire'
-      });
+      setAlert({ type: 'error', message: 'Le nom de l\'adresse est obligatoire' });
       return;
     }
-
     if (!formData.latitude || !formData.longitude) {
-      setAlert({
-        type: 'error',
-        message: 'Vous devez obtenir votre position GPS'
-      });
+      setAlert({ type: 'error', message: 'Vous devez obtenir votre position GPS' });
       return;
     }
-
     setLoading(true);
     setAlert(null);
-
     try {
-      const fullAddress = formData.city;
-      
-      const addressData = {
-        ...formData,
-        fullAddress
-      };
-
+      const addressData = { ...formData, fullAddress: formData.city };
       if (editAddress) {
         await api.addresses.updateAddress(editAddress.id, addressData);
       } else {
         await api.addresses.createAddress(addressData);
       }
-
       onSuccess();
     } catch (error) {
-      setAlert({
-        type: 'error',
-        message: error.message || 'Erreur lors de l\'enregistrement'
-      });
+      setAlert({ type: 'error', message: error.message || 'Erreur lors de l\'enregistrement' });
     } finally {
       setLoading(false);
     }
   };
 
   const labelShortcuts = [
-    { icon: Home, label: 'Maison', color: 'primary' },
+    { icon: Home,      label: 'Maison', color: 'primary'   },
     { icon: Briefcase, label: 'Bureau', color: 'secondary' },
-    { icon: MapPinned, label: 'Autre', color: 'accent' }
+    { icon: MapPinned, label: 'Autre',  color: 'accent'    },
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl animate-scale-in">
-        
-        {/* Header avec gradient GAZBF */}
-        <div className="relative gradient-gazbf p-6">
+    /*
+     * OVERLAY
+     * - inset-0 + z-50 couvre tout l'écran
+     * - flex + flex-col pour empiler overlay → modal
+     * - py-4 + px-4 : marges latérales et verticales sur mobile
+     * - pb-safe : compense la barre de navigation Android/iOS
+     *   (env(safe-area-inset-bottom)) via le plugin tailwindcss-safe-area
+     *   ou le style inline ci-dessous si le plugin n'est pas installé
+     */
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/*
+       * MODAL CARD
+       * Sur mobile  : occupe toute la largeur, monte depuis le bas (bottom-sheet),
+       *               hauteur limitée à 92dvh pour ne jamais déborder.
+       * Sur desktop : largeur max-2xl, centré, hauteur max 90vh.
+       *
+       * rounded-t-3xl mobile / rounded-3xl desktop
+       */}
+      <div
+        className="
+          bg-white w-full
+          rounded-t-3xl sm:rounded-3xl
+          flex flex-col
+          max-h-[92dvh] sm:max-h-[90vh]
+          sm:max-w-2xl
+          shadow-2xl
+          overflow-hidden
+        "
+      >
+        {/* ── Header gradient ─────────────────────────────── */}
+        <div className="relative gradient-gazbf p-5 flex-shrink-0">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white"
           >
             <X className="h-5 w-5" />
           </button>
-
           <div className="text-white">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-1">
               <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
                 <MapPin className="h-6 w-6" />
               </div>
-              <h2 className="text-2xl font-bold">
+              <h2 className="text-xl font-bold">
                 {editAddress ? 'Modifier l\'adresse' : 'Nouvelle adresse'}
               </h2>
             </div>
-            <p className="text-white/90">
+            <p className="text-white/90 text-sm">
               Enregistrez votre position pour des livraisons précises
             </p>
           </div>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+        {/* ── Body scrollable ──────────────────────────────── */}
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-5"
+          /*
+           * overscroll-contain : empêche le scroll de « remonter »
+           * vers la page derrière le modal sur iOS
+           */
+        >
           {alert && (
-            <Alert
-              type={alert.type}
-              message={alert.message}
-              onClose={() => setAlert(null)}
-            />
+            <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} />
           )}
 
-          {/* Section GPS */}
+          {/* GPS */}
           <div className={`relative overflow-hidden rounded-2xl border-2 transition-all ${
-            hasGPS 
-              ? 'border-accent-300 bg-gradient-to-br from-accent-50 to-accent-100' 
+            hasGPS
+              ? 'border-accent-300 bg-gradient-to-br from-accent-50 to-accent-100'
               : 'border-secondary-300 bg-gradient-to-br from-secondary-50 to-secondary-100'
           }`}>
-            <div className="p-5">
+            <div className="p-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className={`p-3 rounded-xl ${hasGPS ? 'bg-accent-500' : 'bg-secondary-500'}`}>
                   <Navigation className="h-6 w-6 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-neutral-900 text-lg">
-                    Position GPS
-                  </h3>
+                  <h3 className="font-bold text-neutral-900">Position GPS</h3>
                   <p className="text-sm text-neutral-600">
                     {hasGPS ? 'Position enregistrée ✓' : 'Position requise'}
                   </p>
@@ -189,16 +194,16 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
               </div>
 
               {hasGPS && (
-                <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 mb-4 border border-accent-200">
+                <div className="bg-white/80 backdrop-blur-sm rounded-xl p-3 mb-4 border border-accent-200">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <span className="text-neutral-600">Latitude:</span>
+                      <span className="text-neutral-600">Latitude :</span>
                       <p className="font-mono font-bold text-neutral-900">
                         {parseFloat(formData.latitude).toFixed(6)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-neutral-600">Longitude:</span>
+                      <span className="text-neutral-600">Longitude :</span>
                       <p className="font-mono font-bold text-neutral-900">
                         {parseFloat(formData.longitude).toFixed(6)}
                       </p>
@@ -209,28 +214,19 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
 
               <Button
                 type="button"
-                variant={hasGPS ? "outline" : "primary"}
+                variant={hasGPS ? 'outline' : 'primary'}
                 fullWidth
                 onClick={handleGetLocation}
                 loading={gettingLocation}
                 disabled={gettingLocation}
-                className="h-14 text-base font-bold"
+                className="h-13 text-base font-bold"
               >
                 {gettingLocation ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Localisation en cours...
-                  </>
+                  'Localisation en cours...'
                 ) : hasGPS ? (
-                  <>
-                    <Zap className="h-5 w-5 mr-2" />
-                    Mettre à jour ma position
-                  </>
+                  <><Zap className="h-5 w-5 mr-2" />Mettre à jour ma position</>
                 ) : (
-                  <>
-                    <Navigation className="h-5 w-5 mr-2" />
-                    Obtenir ma position GPS
-                  </>
+                  <><Navigation className="h-5 w-5 mr-2" />Obtenir ma position GPS</>
                 )}
               </Button>
 
@@ -247,25 +243,23 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
             <label className="block text-sm font-bold text-neutral-900">
               Nom de l'adresse *
             </label>
-            
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {labelShortcuts.map((shortcut) => (
                 <button
                   key={shortcut.label}
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, label: shortcut.label }))}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all font-semibold ${
+                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all font-semibold text-sm ${
                     formData.label === shortcut.label
                       ? `border-${shortcut.color}-500 bg-${shortcut.color}-50 text-${shortcut.color}-700`
                       : 'border-neutral-200 hover:border-neutral-300 text-neutral-600'
                   }`}
                 >
-                  <shortcut.icon className="h-5 w-5" />
+                  <shortcut.icon className="h-4 w-4" />
                   {shortcut.label}
                 </button>
               ))}
             </div>
-
             <Input
               name="label"
               value={formData.label}
@@ -277,9 +271,7 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
 
           {/* Ville */}
           <div>
-            <label className="block text-sm font-bold text-neutral-900 mb-2">
-              Ville *
-            </label>
+            <label className="block text-sm font-bold text-neutral-900 mb-2">Ville *</label>
             <select
               name="city"
               value={formData.city}
@@ -294,9 +286,7 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
 
           {/* Téléphone */}
           <div>
-            <label className="block text-sm font-bold text-neutral-900 mb-2">
-              Numéro de téléphone
-            </label>
+            <label className="block text-sm font-bold text-neutral-900 mb-2">Numéro de téléphone</label>
             <Input
               name="phoneNumber"
               value={formData.phoneNumber}
@@ -331,9 +321,7 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
               className="w-6 h-6 text-primary-600 border-neutral-300 rounded-lg focus:ring-primary-500 cursor-pointer"
             />
             <label htmlFor="isDefault" className="flex-1 cursor-pointer">
-              <span className="text-neutral-900 font-bold block mb-1">
-                Adresse par défaut
-              </span>
+              <span className="text-neutral-900 font-bold block mb-1">Adresse par défaut</span>
               <span className="text-sm text-neutral-600">
                 Sera utilisée automatiquement pour vos commandes
               </span>
@@ -345,15 +333,12 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
             )}
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t-2 border-neutral-100">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1"
-            >
+          {/* Actions — padding bottom supplémentaire pour la safe area */}
+          <div
+            className="flex gap-3 pt-4 border-t-2 border-neutral-100"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+          >
+            <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="flex-1">
               Annuler
             </Button>
             <Button
@@ -361,7 +346,7 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
               variant="gradient"
               loading={loading}
               disabled={!hasGPS || loading}
-              className="flex-1 h-14 text-base font-bold"
+              className="flex-1 h-13 text-base font-bold"
             >
               {editAddress ? 'Mettre à jour' : 'Enregistrer l\'adresse'}
             </Button>
