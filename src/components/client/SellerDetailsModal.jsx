@@ -22,23 +22,14 @@ const SellerDetailsModal = ({
   const [showAccessModal, setShowAccessModal] = useState(false);
   const [isOpen, setIsOpen] = useState(null);
 
-  // Fonction pour vérifier si le dépôt est ouvert
   const checkIfOpen = () => {
-    if (!seller?.openingHours) return null; // Retourner null si pas d'horaires définis
+    if (!seller?.openingHours) return null;
 
     const openingHours = seller.openingHours;
 
-    // Si ouvert 24/7
-    if (openingHours.isOpen24_7) {
-      return true;
-    }
+    if (openingHours.isOpen24_7) return true;
+    if (openingHours.isClosed) return false;
 
-    // Si fermé définitivement
-    if (openingHours.isClosed) {
-      return false;
-    }
-
-    // Vérifier les horaires du jour actuel
     const now = new Date();
     const daysMap = {
       'dimanche': 'sunday',
@@ -52,16 +43,12 @@ const SellerDetailsModal = ({
     
     const currentDayFr = now.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase();
     const currentDay = daysMap[currentDayFr];
-    const currentTime = now.toTimeString().slice(0, 5); // Format HH:MM
+    const currentTime = now.toTimeString().slice(0, 5);
 
     const todaySchedule = openingHours.schedule?.[currentDay];
     
-    // Si pas d'horaires pour aujourd'hui ou jour désactivé
-    if (!todaySchedule || !todaySchedule.enabled) {
-      return false;
-    }
+    if (!todaySchedule || !todaySchedule.enabled) return false;
 
-    // Vérifier si l'heure actuelle est dans la plage horaire
     return currentTime >= todaySchedule.open && currentTime <= todaySchedule.close;
   };
 
@@ -72,10 +59,8 @@ const SellerDetailsModal = ({
       });
     }
     
-    // Vérifier si le dépôt est ouvert
     setIsOpen(checkIfOpen());
     
-    // Mettre à jour toutes les minutes
     const interval = setInterval(() => {
       setIsOpen(checkIfOpen());
     }, 60000);
@@ -118,9 +103,7 @@ const SellerDetailsModal = ({
       return;
     }
 
-    if (isOpen === false) {
-      return; // Ne pas permettre l'ajout si fermé (mais autoriser si null)
-    }
+    if (isOpen === false) return;
     
     setSelectedProducts(prev => {
       const exists = prev.find(p => p.id === product.id);
@@ -146,9 +129,7 @@ const SellerDetailsModal = ({
       return;
     }
 
-    if (isOpen === false) {
-      return; // Ne pas permettre la commande si fermé
-    }
+    if (isOpen === false) return;
 
     onOrder(seller, selectedProducts);
   };
@@ -173,46 +154,57 @@ const SellerDetailsModal = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
+      {/* Overlay — inset-0 + flex centré */}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+        {/*
+          CHANGEMENTS CLÉS :
+          - Sur mobile (< sm) : sheet qui monte du bas (items-end), arrondi uniquement en haut
+          - Sur desktop (sm+) : centré avec padding, arrondi partout
+          - max-h calculé pour laisser la place à la safe area du bas (pb-safe)
+          - Le conteneur est "relative" pour le bouton X absolu
+          - flex flex-col + overflow-hidden sur le conteneur
+          - La zone scrollable (flex-1 overflow-y-auto) est distincte du footer fixe
+        */}
+        <div className="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
+          
           {/* Header avec gradient */}
-          <div className="gradient-gazbf p-6">
+          <div className="gradient-gazbf p-5 sm:p-6 flex-shrink-0">
+            {/* Bouton fermer — positionné via relative sur le header */}
             <button
               onClick={onClose}
-              className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white"
+              className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white z-10"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <div className="text-white">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="text-white pr-10">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
                 {!seller.businessName && (
-                  <Building2 className="h-6 w-6" />
+                  <Building2 className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
                 )}
-                <h2 className="text-2xl font-bold">
+                <h2 className="text-xl sm:text-2xl font-bold leading-tight break-words">
                   {displayName}
                 </h2>
-                {/* Indicateur d'ouverture - Afficher uniquement si horaires définis */}
                 {isOpen === false && (
-                  <span className="ml-2 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center gap-1 flex-shrink-0">
                     <Clock className="h-3 w-3" />
                     FERMÉ
                   </span>
                 )}
                 {isOpen === true && (
-                  <span className="ml-2 px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full flex items-center gap-1 flex-shrink-0">
                     <Clock className="h-3 w-3" />
                     OUVERT
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  <span>{seller.quarter || 'Quartier non précisé'}, {seller.city}</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm">
+                <div className="flex items-center gap-1 min-w-0">
+                  <MapPin className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{seller.quarter || 'Quartier non précisé'}, {seller.city}</span>
                 </div>
                 {seller.averageRating > 0 ? (
-                  <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">
+                  <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm flex-shrink-0">
                     <Star className="h-4 w-4 fill-secondary-400 text-secondary-400" />
                     <span className="font-bold">
                       {parseFloat(seller.averageRating).toFixed(1)}
@@ -220,7 +212,7 @@ const SellerDetailsModal = ({
                     <span>({seller.totalReviews} avis)</span>
                   </div>
                 ) : (
-                  <span className="text-xs bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm font-semibold">
+                  <span className="text-xs bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm font-semibold flex-shrink-0">
                     Nouveau revendeur
                   </span>
                 )}
@@ -228,21 +220,21 @@ const SellerDetailsModal = ({
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          {/* Zone scrollable — flex-1 garantit qu'elle prend l'espace dispo sans déborder */}
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
             
             {/* Message si le dépôt est fermé */}
             {isOpen === false && hasAccess && (
-              <div className="mb-6 bg-gradient-to-r from-red-50 to-red-100 border-2 border-red-300 rounded-xl p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Clock className="h-6 w-6 text-white" />
+              <div className="mb-5 bg-gradient-to-r from-red-50 to-red-100 border-2 border-red-300 rounded-xl p-4 sm:p-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-neutral-900 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-neutral-900 mb-1">
                       🕐 Dépôt actuellement fermé
                     </h3>
-                    <p className="text-neutral-700">
+                    <p className="text-sm sm:text-base text-neutral-700">
                       Ce dépôt est fermé pour le moment. Les commandes seront disponibles pendant les heures d'ouverture. Consultez les horaires ci-dessous.
                     </p>
                   </div>
@@ -252,16 +244,16 @@ const SellerDetailsModal = ({
 
             {/* Message d'accès requis */}
             {!hasAccess && (
-              <div className="mb-6 bg-gradient-to-r from-secondary-50 to-secondary-100 border-2 border-secondary-300 rounded-xl p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-secondary-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Lock className="h-6 w-6 text-white" />
+              <div className="mb-5 bg-gradient-to-r from-secondary-50 to-secondary-100 border-2 border-secondary-300 rounded-xl p-4 sm:p-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-secondary-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-neutral-900 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-neutral-900 mb-2">
                       🔒 Informations protégées
                     </h3>
-                    <p className="text-neutral-700 mb-4">
+                    <p className="text-sm sm:text-base text-neutral-700 mb-4">
                       Pour accéder aux coordonnées, à l'itinéraire et passer commande, vous devez acheter un accès 24h.
                     </p>
                     <Button
@@ -276,20 +268,20 @@ const SellerDetailsModal = ({
             )}
 
             {/* Localisation */}
-            <div className="mb-6">
+            <div className="mb-5">
               <h3 className="font-bold text-neutral-900 mb-3 flex items-center gap-2">
                 <MapPin className="h-5 w-5 text-primary-600" />
                 Localisation
               </h3>
               <div className="bg-gradient-to-br from-neutral-50 to-neutral-100 rounded-xl p-4 space-y-3 border-2 border-neutral-200">
-                <p className="text-neutral-700">
+                <p className="text-neutral-700 text-sm sm:text-base">
                   <span className="font-bold">Quartier:</span> {seller.quarter || 'Non précisé'}
                 </p>
-                <p className="text-neutral-700">
+                <p className="text-neutral-700 text-sm sm:text-base">
                   <span className="font-bold">Ville:</span> {seller.city}
                 </p>
                 {seller.distance !== null && seller.distance !== undefined && (
-                  <p className="text-neutral-700">
+                  <p className="text-neutral-700 text-sm sm:text-base">
                     <span className="font-bold">Distance:</span>{' '}
                     <span className="font-bold bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent">
                       {formatDistance(seller.distance)}
@@ -320,7 +312,7 @@ const SellerDetailsModal = ({
                 ) : (
                   <div className="bg-secondary-50 border-2 border-secondary-200 rounded-lg p-3 mt-2">
                     <p className="text-sm text-secondary-800 flex items-center gap-2 font-medium">
-                      <MapPin className="h-4 w-4" />
+                      <MapPin className="h-4 w-4 flex-shrink-0" />
                       Coordonnées GPS non disponibles
                     </p>
                   </div>
@@ -331,25 +323,25 @@ const SellerDetailsModal = ({
             {/* Heures d'ouverture */}
             <OpeningHoursDisplay openingHours={seller.openingHours} />
 
-            {/* Contact et Livraison */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            {/* Contact et Livraison — grid 1 col sur très petit mobile, 2 cols sinon */}
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 mb-5">
               <button
                 onClick={handleCall}
                 disabled={!hasAccess}
-                className={`flex items-center gap-3 p-4 rounded-xl transition-all border-2 ${
+                className={`flex items-center gap-3 p-4 rounded-xl transition-all border-2 w-full ${
                   hasAccess 
                     ? 'bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200 hover:border-primary-300 cursor-pointer' 
                     : 'bg-neutral-100 border-neutral-200 cursor-not-allowed opacity-60'
                 }`}
               >
                 {hasAccess ? (
-                  <Phone className="h-5 w-5 text-primary-600" />
+                  <Phone className="h-5 w-5 text-primary-600 flex-shrink-0" />
                 ) : (
-                  <Lock className="h-5 w-5 text-neutral-400" />
+                  <Lock className="h-5 w-5 text-neutral-400 flex-shrink-0" />
                 )}
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <p className="text-xs text-neutral-600 font-medium">Téléphone</p>
-                  <p className="font-bold text-neutral-900">
+                  <p className="font-bold text-neutral-900 truncate">
                     {hasAccess ? seller.phone : '*** *** ****'}
                   </p>
                 </div>
@@ -357,17 +349,17 @@ const SellerDetailsModal = ({
 
               {seller.deliveryAvailable ? (
                 <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-accent-50 to-accent-100 rounded-xl border-2 border-accent-200">
-                  <Truck className="h-5 w-5 text-accent-600" />
-                  <div>
+                  <Truck className="h-5 w-5 text-accent-600 flex-shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs text-neutral-600 font-medium">Livraison disponible</p>
-                    <p className="font-bold text-accent-700">
+                    <p className="font-bold text-accent-700 truncate">
                       {seller.deliveryFee > 0 ? formatPrice(seller.deliveryFee) : 'Gratuit'}
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 p-4 bg-neutral-100 rounded-xl border-2 border-neutral-200">
-                  <Truck className="h-5 w-5 text-neutral-400" />
+                  <Truck className="h-5 w-5 text-neutral-400 flex-shrink-0" />
                   <div>
                     <p className="text-xs text-neutral-600 font-medium">Livraison</p>
                     <p className="text-sm text-neutral-500 font-medium">Non disponible</p>
@@ -377,7 +369,7 @@ const SellerDetailsModal = ({
             </div>
 
             {/* Produits */}
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <h3 className="font-bold text-base sm:text-lg mb-4 flex items-center gap-2">
               <Package className="h-5 w-5 text-primary-600" />
               Produits disponibles ({seller.products?.length || 0})
             </h3>
@@ -397,35 +389,35 @@ const SellerDetailsModal = ({
                   return (
                     <div
                       key={product.id}
-                      className={`border-2 rounded-xl p-4 transition-all ${
+                      className={`border-2 rounded-xl p-3 sm:p-4 transition-all ${
                         isSelected 
                           ? 'border-primary-600 bg-gradient-to-br from-primary-50 to-secondary-50 shadow-gazbf' 
                           : 'border-neutral-200 hover:border-neutral-300'
                       } ${(!isAvailable || isOpen === false) && 'opacity-50'}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-bold text-neutral-900">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-neutral-900 text-sm sm:text-base truncate">
                             {product.brand} - {product.bottleType}
                           </h4>
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-lg font-bold bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent">
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent">
                               {formatPrice(product.price)}
                             </span>
                             {product.status === 'available' && (isOpen === true || isOpen === null) && (
-                              <span className="text-sm text-accent-600 font-bold">✓ Disponible</span>
+                              <span className="text-xs sm:text-sm text-accent-600 font-bold">✓ Disponible</span>
                             )}
                             {product.status === 'limited' && (isOpen === true || isOpen === null) && (
-                              <span className="text-sm text-secondary-600 font-bold">⚠ Quantité faible</span>
+                              <span className="text-xs sm:text-sm text-secondary-600 font-bold">⚠ Quantité faible</span>
                             )}
                             {product.status === 'out_of_stock' && (
-                              <span className="text-sm text-red-600 font-bold">✗ Rupture de stock</span>
+                              <span className="text-xs sm:text-sm text-red-600 font-bold">✗ Rupture</span>
                             )}
                             {isOpen === false && isAvailable && (
-                              <span className="text-sm text-red-600 font-bold">🕐 Fermé</span>
+                              <span className="text-xs sm:text-sm text-red-600 font-bold">🕐 Fermé</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 mt-2 text-xs text-neutral-500">
+                          <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
                             <span>{product.viewCount || 0} vue{(product.viewCount || 0) !== 1 ? 's' : ''}</span>
                             <span>•</span>
                             <span>{product.orderCount || 0} vente{(product.orderCount || 0) !== 1 ? 's' : ''}</span>
@@ -433,7 +425,7 @@ const SellerDetailsModal = ({
                         </div>
 
                         {isAvailable && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             {isSelected ? (
                               <>
                                 <button
@@ -443,7 +435,7 @@ const SellerDetailsModal = ({
                                 >
                                   -
                                 </button>
-                                <span className="w-8 text-center font-bold">
+                                <span className="w-6 text-center font-bold text-sm">
                                   {isSelected.quantity}
                                 </span>
                                 <button
@@ -455,7 +447,7 @@ const SellerDetailsModal = ({
                                 </button>
                                 <button
                                   onClick={() => toggleProduct(product)}
-                                  className="ml-2 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="ml-1 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                   disabled={!canOrder}
                                 >
                                   <X className="h-5 w-5" />
@@ -487,12 +479,12 @@ const SellerDetailsModal = ({
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer — flex-shrink-0 pour ne jamais être écrasé, pb-safe pour les iPhones */}
           {selectedProducts.length > 0 && hasAccess ? (
-            <div className="p-6 border-t-2 border-neutral-100 bg-neutral-50">
-              <div className="flex items-center justify-between mb-4">
+            <div className="flex-shrink-0 p-4 sm:p-6 border-t-2 border-neutral-100 bg-neutral-50 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex items-center justify-between mb-3">
                 <span className="text-neutral-700 font-bold">Total</span>
-                <span className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent">
+                <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent">
                   {formatPrice(total)}
                 </span>
               </div>
@@ -514,7 +506,7 @@ const SellerDetailsModal = ({
               </Button>
             </div>
           ) : (
-            <div className="p-6 border-t-2 border-neutral-100">
+            <div className="flex-shrink-0 p-4 sm:p-6 border-t-2 border-neutral-100 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <Button variant="outline" fullWidth onClick={onClose}>
                 Fermer
               </Button>
@@ -523,7 +515,6 @@ const SellerDetailsModal = ({
         </div>
       </div>
 
-      {/* Modal d'achat d'accès */}
       {showAccessModal && (
         <AccessPurchaseModal
           onClose={() => setShowAccessModal(false)}
