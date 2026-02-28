@@ -1,17 +1,28 @@
 // ==========================================
 // FICHIER: src/pages/auth/Register.jsx
-// ✅ CLIENTS UNIQUEMENT - Inscription directe sans OTP
+// ✅ CLIENTS UNIQUEMENT - Inscription directe avec vérification GPS obligatoire
 // ✅ RESPONSIVE: Optimisé pour mobile (320px+), tablette et desktop
 // ==========================================
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Phone, Lock, Building2 } from 'lucide-react';
+import { User, Phone, Lock, Building2, MapPin, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Alert from '../../components/common/Alert';
 import useAuthStore from '../../store/authStore';
 import { api } from '../../api/apiSwitch';
+import { verifyUserLocationForCity } from '../../utils/locationValidation';
+
+// ==========================================
+// STATUTS DE VÉRIFICATION GPS
+// ==========================================
+const GPS_STATUS = {
+  IDLE: 'idle',         // Pas encore vérifié
+  LOADING: 'loading',   // Vérification en cours
+  SUCCESS: 'success',   // Position confirmée
+  ERROR: 'error'        // Échec ou ville incorrecte
+};
 
 const Register = () => {
   const navigate = useNavigate();
@@ -29,12 +40,47 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState(null);
 
-  // ✅ FIX: Suppression des espaces dans le numéro de téléphone
+  // ==========================================
+  // ÉTAT DE VÉRIFICATION GPS
+  // ==========================================
+  const [gpsStatus, setGpsStatus] = useState(GPS_STATUS.IDLE);
+  const [gpsMessage, setGpsMessage] = useState('');
+  const [gpsData, setGpsData] = useState(null);
+  const [gpsSuggestedCity, setGpsSuggestedCity] = useState(null);
+
+  // ✅ Réinitialiser la vérification GPS quand la ville change
+  const handleCityChange = (e) => {
+    const { value } = e.target;
+    setFormData(prev => ({ ...prev, city: value }));
+    setGpsStatus(GPS_STATUS.IDLE);
+    setGpsMessage('');
+    setGpsData(null);
+    setGpsSuggestedCity(null);
+    setAlert(null);
+  };
+
   const sanitizePhone = (value) => value.replace(/\s/g, '');
+
+  // ✅ Bloque les caractères interdits pour prénom/nom avant insertion
+  const handleNameBeforeInput = (e) => {
+    if (e.data && !/^[a-zA-Z\u00C0-\u00FF\s'\-]$/.test(e.data)) {
+      e.preventDefault();
+    }
+  };
+
+  // ✅ Nettoie le texte collé pour prénom/nom
+  const handleNamePaste = (e, fieldName) => {
+    e.preventDefault();
+    const cleaned = e.clipboardData.getData('text')
+      .replace(/[^a-zA-Z\u00C0-\u00FF\s'\-]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trimStart()
+      .slice(0, 25);
+    setFormData(prev => ({ ...prev, [fieldName]: cleaned }));
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     if (name === 'phone') {
       const sanitized = sanitizePhone(value);
       if (!sanitized.startsWith('+226')) {
@@ -48,13 +94,66 @@ const Register = () => {
   };
 
   // ==========================================
-  // SOUMISSION INSCRIPTION CLIENT — Connexion directe sans OTP
+  // VÉRIFICATION GPS
+  // ==========================================
+  const handleVerifyLocation = async () => {
+    if (!formData.city) {
+      setAlert({ type: 'error', message: 'Veuillez d\'abord sélectionner une ville.' });
+      return;
+    }
+
+    setGpsStatus(GPS_STATUS.LOADING);
+    setGpsMessage('');
+    setGpsSuggestedCity(null);
+    setAlert(null);
+
+    try {
+      const result = await verifyUserLocationForCity(formData.city);
+
+      if (result.valid) {
+        setGpsStatus(GPS_STATUS.SUCCESS);
+        setGpsMessage(result.message);
+        setGpsData({
+          latitude: result.latitude,
+          longitude: result.longitude,
+          distance: result.distance,
+          accuracy: result.accuracy
+        });
+      } else {
+        setGpsStatus(GPS_STATUS.ERROR);
+        setGpsMessage(result.message);
+        setGpsData(null);
+        if (result.suggestedCity) {
+          setGpsSuggestedCity(result.suggestedCity);
+        }
+      }
+    } catch (error) {
+      setGpsStatus(GPS_STATUS.ERROR);
+      setGpsMessage(error.message || 'Impossible d\'obtenir votre position GPS.');
+      setGpsData(null);
+    }
+  };
+
+  // ==========================================
+  // Appliquer la suggestion de ville
+  // ==========================================
+  const applySuggestedCity = () => {
+    if (gpsSuggestedCity) {
+      setFormData(prev => ({ ...prev, city: gpsSuggestedCity }));
+      setGpsStatus(GPS_STATUS.IDLE);
+      setGpsMessage('');
+      setGpsData(null);
+      setGpsSuggestedCity(null);
+    }
+  };
+
+  // ==========================================
+  // SOUMISSION INSCRIPTION CLIENT
   // ==========================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     setAlert(null);
 
-    // Validation
     if (!formData.phone || formData.phone.length < 12) {
       setAlert({ type: 'error', message: 'Numéro de téléphone invalide' });
       return;
@@ -80,26 +179,41 @@ const Register = () => {
       return;
     }
 
+    // ✅ BLOCAGE si la position GPS n'est pas confirmée
+    if (gpsStatus !== GPS_STATUS.SUCCESS) {
+      setAlert({
+        type: 'error',
+        message: 'Vous devez vérifier votre position GPS avant de vous inscrire.'
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      console.log('📤 Envoi inscription CLIENT:', formData);
+      console.log('📤 Envoi inscription CLIENT:', {
+        ...formData,
+        gpsVerified: true,
+        latitude: gpsData?.latitude,
+        longitude: gpsData?.longitude
+      });
 
       const response = await api.auth.register({
         phone: formData.phone,
         password: formData.password,
         role: 'client',
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        city: formData.city
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        city: formData.city,
+        latitude: gpsData?.latitude,
+        longitude: gpsData?.longitude,
+        locationVerified: true
       });
 
       console.log('📥 Réponse inscription:', response);
 
       if (response.success) {
         const { token, user } = response.data;
-
-        // ✅ Connexion directe — plus besoin d'OTP
         login(token, user);
         navigate('/client/map');
       }
@@ -116,11 +230,59 @@ const Register = () => {
     }
   };
 
+  // ==========================================
+  // RENDU DU BADGE GPS
+  // ==========================================
+  const renderGPSBadge = () => {
+    if (gpsStatus === GPS_STATUS.IDLE) return null;
+
+    if (gpsStatus === GPS_STATUS.LOADING) {
+      return (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          <Loader className="h-4 w-4 animate-spin flex-shrink-0" />
+          <span>Localisation en cours...</span>
+        </div>
+      );
+    }
+
+    if (gpsStatus === GPS_STATUS.SUCCESS) {
+      return (
+        <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+          <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <span>{gpsMessage}</span>
+        </div>
+      );
+    }
+
+    if (gpsStatus === GPS_STATUS.ERROR) {
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>{gpsMessage}</span>
+          </div>
+          {gpsSuggestedCity && (
+            <button
+              type="button"
+              onClick={applySuggestedCity}
+              className="text-xs text-blue-600 hover:text-blue-800 underline text-left"
+            >
+              → Changer la ville pour "{gpsSuggestedCity}"
+            </button>
+          )}
+        </div>
+      );
+    }
+  };
+
+  // ==========================================
+  // RENDU
+  // ==========================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-3 sm:p-4 md:p-6">
       <div className="max-w-md w-full">
 
-        {/* Titre - Responsive */}
+        {/* Titre */}
         <div className="text-center mb-6 sm:mb-8 px-2">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
             Créer un compte client
@@ -130,7 +292,7 @@ const Register = () => {
           </p>
         </div>
 
-        {/* Formulaire - Responsive */}
+        {/* Formulaire */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-5 sm:p-6 md:p-8">
 
           {alert && (
@@ -158,6 +320,9 @@ const Register = () => {
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleChange}
+                onBeforeInput={handleNameBeforeInput}
+                onPaste={(e) => handleNamePaste(e, 'firstName')}
+                maxLength={25}
                 required
               />
               <Input
@@ -165,6 +330,9 @@ const Register = () => {
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleChange}
+                onBeforeInput={handleNameBeforeInput}
+                onPaste={(e) => handleNamePaste(e, 'lastName')}
+                maxLength={25}
                 required
               />
             </div>
@@ -201,6 +369,9 @@ const Register = () => {
               />
             </div>
 
+            {/* ====================================
+                VILLE + VÉRIFICATION GPS
+            ==================================== */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Ville
@@ -208,7 +379,7 @@ const Register = () => {
               <select
                 name="city"
                 value={formData.city}
-                onChange={handleChange}
+                onChange={handleCityChange}
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                 required
               >
@@ -218,16 +389,71 @@ const Register = () => {
               </select>
             </div>
 
+            {/* Bloc vérification GPS — visible uniquement si une ville est sélectionnée */}
+            {formData.city && (
+              <div className="space-y-2">
+                {/* Info explicative */}
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <MapPin className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800">
+                    FasoGaz est disponible uniquement à <strong>Ouagadougou</strong> et <strong>Bobo-Dioulasso</strong>.
+                    Veuillez vérifier que vous êtes bien dans la ville sélectionnée.
+                  </p>
+                </div>
+
+                {/* Badge de résultat GPS */}
+                {renderGPSBadge()}
+
+                {/* Bouton de vérification */}
+                <button
+                  type="button"
+                  onClick={handleVerifyLocation}
+                  disabled={gpsStatus === GPS_STATUS.LOADING}
+                  className={`
+                    w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all
+                    ${gpsStatus === GPS_STATUS.SUCCESS
+                      ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
+                      : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    }
+                    disabled:opacity-60 disabled:cursor-not-allowed
+                  `}
+                >
+                  {gpsStatus === GPS_STATUS.LOADING ? (
+                    <Loader className="h-4 w-4 animate-spin" />
+                  ) : gpsStatus === GPS_STATUS.SUCCESS ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <MapPin className="h-4 w-4" />
+                  )}
+                  {gpsStatus === GPS_STATUS.SUCCESS
+                    ? 'Position vérifiée ✓'
+                    : gpsStatus === GPS_STATUS.LOADING
+                    ? 'Vérification...'
+                    : 'Vérifier ma position GPS'
+                  }
+                </button>
+              </div>
+            )}
+
+            {/* Bouton inscription — désactivé si GPS non validé */}
             <Button
               type="submit"
               variant="primary"
               fullWidth
               loading={loading}
+              disabled={loading || gpsStatus !== GPS_STATUS.SUCCESS}
             >
               {loading ? 'Inscription...' : 'Créer mon compte'}
             </Button>
 
-            {/* Lien vers inscription revendeur - Responsive */}
+            {/* Indication si le bouton est désactivé */}
+            {formData.city && gpsStatus !== GPS_STATUS.SUCCESS && (
+              <p className="text-xs text-center text-gray-500">
+                La vérification GPS est requise pour vous inscrire.
+              </p>
+            )}
+
+            {/* Lien vers inscription revendeur */}
             <div className="mt-5 sm:mt-6 p-3 sm:p-4 bg-orange-50 border border-orange-200 rounded-lg">
               <div className="flex items-start gap-2 sm:gap-3">
                 <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 flex-shrink-0 mt-0.5" />

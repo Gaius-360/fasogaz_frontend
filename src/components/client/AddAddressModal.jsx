@@ -32,7 +32,6 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
     if (formData.latitude && formData.longitude) {
       setHasGPS(true);
     }
-    // Empêche le scroll du body quand le modal est ouvert
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
@@ -100,29 +99,21 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
   ];
 
   return (
-    /*
-     * OVERLAY
-     * - inset-0 + z-50 couvre tout l'écran
-     * - flex + flex-col pour empiler overlay → modal
-     * - py-4 + px-4 : marges latérales et verticales sur mobile
-     * - pb-safe : compense la barre de navigation Android/iOS
-     *   (env(safe-area-inset-bottom)) via le plugin tailwindcss-safe-area
-     *   ou le style inline ci-dessous si le plugin n'est pas installé
-     */
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/*
-       * MODAL CARD
-       * Sur mobile  : occupe toute la largeur, monte depuis le bas (bottom-sheet),
-       *               hauteur limitée à 92dvh pour ne jamais déborder.
-       * Sur desktop : largeur max-2xl, centré, hauteur max 90vh.
+       * Le conteneur est flex-col avec 3 zones distinctes :
+       *   1. Header      — flex-shrink-0 (hauteur fixe)
+       *   2. Body/form   — flex-1 + overflow-y-auto (scrollable)
+       *   3. Footer      — flex-shrink-0 (hauteur fixe, JAMAIS écrasé)
        *
-       * rounded-t-3xl mobile / rounded-3xl desktop
+       * Grâce à flex-col + overflow-hidden sur ce div, le footer reste
+       * toujours visible même quand le contenu est long.
        */}
-      <div
+      <form
+        onSubmit={handleSubmit}
         className="
           bg-white w-full
           rounded-t-3xl sm:rounded-3xl
@@ -136,6 +127,7 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
         {/* ── Header gradient ─────────────────────────────── */}
         <div className="relative gradient-gazbf p-5 flex-shrink-0">
           <button
+            type="button"
             onClick={onClose}
             className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white"
           >
@@ -157,14 +149,7 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
         </div>
 
         {/* ── Body scrollable ──────────────────────────────── */}
-        <form
-          onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-5"
-          /*
-           * overscroll-contain : empêche le scroll de « remonter »
-           * vers la page derrière le modal sur iOS
-           */
-        >
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-5">
           {alert && (
             <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} />
           )}
@@ -332,27 +317,38 @@ const AddAddressModal = ({ onClose, onSuccess, editAddress = null }) => {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Actions — padding bottom supplémentaire pour la safe area */}
-          <div
-            className="flex gap-3 pt-4 border-t-2 border-neutral-100"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+        {/* ── Footer fixe — HORS du scroll ────────────────── */}
+        {/*
+         * flex-shrink-0 garantit que ce bloc ne sera jamais compressé
+         * ni caché, quelle que soit la hauteur du contenu au-dessus.
+         * pb-safe compense la barre de navigation iOS/Android.
+         */}
+        <div
+          className="flex-shrink-0 flex gap-3 p-5 border-t-2 border-neutral-100 bg-white"
+          style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1"
           >
-            <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="flex-1">
-              Annuler
-            </Button>
-            <Button
-              type="submit"
-              variant="gradient"
-              loading={loading}
-              disabled={!hasGPS || loading}
-              className="flex-1 h-13 text-base font-bold"
-            >
-              {editAddress ? 'Mettre à jour' : 'Enregistrer l\'adresse'}
-            </Button>
-          </div>
-        </form>
-      </div>
+            Annuler
+          </Button>
+          <Button
+            type="submit"
+            variant="gradient"
+            loading={loading}
+            disabled={!hasGPS || loading}
+            className="flex-1 h-13 text-base font-bold"
+          >
+            {editAddress ? 'Mettre à jour' : 'Enregistrer l\'adresse'}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 };

@@ -24,9 +24,21 @@ const ProfileComplete = () => {
     email: user?.email || ''
   });
 
+  // ✅ Normalisation des noms : trim, max 50 chars, lettres/espaces/tirets/apostrophes uniquement
+  const normalizeName = (value) =>
+    value
+      .trimStart()
+      .replace(/[^a-zA-ZÀ-ÿ\s'\-]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .slice(0, 25);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'firstName' || name === 'lastName') {
+      setFormData(prev => ({ ...prev, [name]: normalizeName(value) }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSave = async () => {
@@ -34,7 +46,12 @@ const ProfileComplete = () => {
     setAlert(null);
     
     try {
-      const response = await api.auth.updateProfile(formData);
+      const response = await api.auth.updateProfile({
+        ...formData,
+        // ✅ Trim final avant envoi
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+      });
       
       if (response.success) {
         updateUser(response.data);
@@ -156,12 +173,14 @@ const ProfileComplete = () => {
                     value={formData.firstName}
                     onChange={handleChange}
                     placeholder="Prénom"
+                    maxLength={25}
                   />
                   <Input
                     name="lastName"
                     value={formData.lastName}
                     onChange={handleChange}
                     placeholder="Nom"
+                    maxLength={25}
                   />
                 </div>
                 

@@ -93,9 +93,30 @@ const SellerProfile = () => {
     return isNaN(num) ? null : num.toFixed(decimals);
   };
 
+  // ✅ Normalisation prénom / nom : lettres, espaces, tirets, apostrophes — max 50 chars
+  const normalizeName = (value) =>
+    value
+      .trimStart()
+      .replace(/[^a-zA-ZÀ-ÿ\s'\-]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .slice(0, 25);
+
+  // ✅ Normalisation nom de dépôt : caractères imprimables standards — max 25 chars
+  const normalizeBusinessName = (value) =>
+    value
+      .trimStart()
+      .replace(/\s{2,}/g, ' ')
+      .slice(0, 25);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'firstName' || name === 'lastName') {
+      setFormData(prev => ({ ...prev, [name]: normalizeName(value) }));
+    } else if (name === 'businessName') {
+      setFormData(prev => ({ ...prev, [name]: normalizeBusinessName(value) }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleDeliveryChange = (e) => {
@@ -184,8 +205,13 @@ const SellerProfile = () => {
     setAlert(null);
     
     try {
-      // ✅ formData inclut maintenant quarter et city
-      const response = await api.auth.updateProfile(formData);
+      // ✅ Trim final avant envoi au serveur
+      const response = await api.auth.updateProfile({
+        ...formData,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        businessName: formData.businessName.trim(),
+      });
       if (response.success) {
         updateUser(response.data.user);
         setAlert({ type: 'success', message: 'Profil mis à jour avec succès' });
@@ -396,11 +422,24 @@ const SellerProfile = () => {
                   value={formData.businessName}
                   onChange={handleChange}
                   placeholder="Nom du dépôt *"
+                  maxLength={25}
                   required
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Input name="firstName" value={formData.firstName} onChange={handleChange} placeholder="Prénom" />
-                  <Input name="lastName" value={formData.lastName} onChange={handleChange} placeholder="Nom" />
+                  <Input
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    placeholder="Prénom"
+                    maxLength={25}
+                  />
+                  <Input
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    placeholder="Nom"
+                    maxLength={25}
+                  />
                 </div>
               </div>
             )}
