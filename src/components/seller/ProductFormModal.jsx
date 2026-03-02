@@ -50,7 +50,7 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (!validate()) return;
 
     setLoading(true);
@@ -87,10 +87,21 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl overflow-hidden">
+      {/*
+        ─────────────────────────────────────────────────────────
+        Clé du fix mobile :
+        • On retire max-h fixe et on laisse le modal grandir
+          jusqu'à 100dvh (dynamic viewport height = exclut le
+          clavier virtuel sur iOS/Android).
+        • Le body scrollable absorbe le contenu, le footer reste
+          toujours visible au-dessus du clavier.
+        ─────────────────────────────────────────────────────────
+      */}
+      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col shadow-2xl overflow-hidden"
+        style={{ maxHeight: '100dvh' }}
+      >
 
         {/* Header */}
         <div className="gradient-gazbf p-5 flex-shrink-0">
@@ -193,12 +204,14 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
               required
               helpText="Statut automatique: >5 = Disponible, 1-5 = Limité, 0 = Rupture"
             />
+
+            {/* Espace bas pour que le dernier champ reste visible au-dessus du footer */}
+            <div className="h-2" />
           </form>
         </div>
 
-        {/* Footer */}
-        <div
-          className="p-5 border-t-2 border-neutral-100 bg-neutral-50 flex-shrink-0"
+        {/* Footer — toujours visible, colle au bas du viewport */}
+        <div className="p-5 border-t-2 border-neutral-100 bg-neutral-50 flex-shrink-0"
           style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
         >
           <div className="flex gap-3">
