@@ -80,21 +80,13 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      /*
-        ↓ C'est ici le fix principal :
-        pb-[env(safe-area-inset-bottom)] pousse le modal vers le haut
-        exactement de la hauteur de la barre de navigation mobile,
-        qu'elle soit sur iOS (home indicator) ou Android (nav bar).
-      */
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div
-        className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col shadow-2xl overflow-hidden"
-        style={{ maxHeight: '90dvh' }}
+        className="relative bg-white w-full max-w-md rounded-2xl flex flex-col shadow-2xl overflow-hidden"
+        style={{ maxHeight: '85vh' }}
       >
-
         {/* Header */}
         <div className="gradient-gazbf p-5 flex-shrink-0">
           <button
@@ -118,15 +110,13 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* Zone scrollable : champs + boutons à l'intérieur */}
+        {/* Zone scrollable */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-5">
-
           {alert && (
             <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-4" />
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-
             {/* Type de bouteille */}
             <div>
               <label className="block text-sm font-bold text-neutral-900 mb-2">
@@ -200,7 +190,7 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
             />
 
             {/* Boutons dans le scroll */}
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-2 pb-2">
               <Button variant="outline" onClick={onClose} disabled={loading} type="button">
                 Annuler
               </Button>
@@ -214,10 +204,8 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
                 {isEdit ? 'Mettre à jour' : 'Créer le produit'}
               </Button>
             </div>
-
           </form>
         </div>
-
       </div>
     </div>
   );
