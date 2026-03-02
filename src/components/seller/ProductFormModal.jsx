@@ -82,6 +82,13 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      /*
+        ↓ C'est ici le fix principal :
+        pb-[env(safe-area-inset-bottom)] pousse le modal vers le haut
+        exactement de la hauteur de la barre de navigation mobile,
+        qu'elle soit sur iOS (home indicator) ou Android (nav bar).
+      */
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div
         className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col shadow-2xl overflow-hidden"
@@ -192,11 +199,8 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
               helpText="Statut automatique: >5 = Disponible, 1-5 = Limité, 0 = Rupture"
             />
 
-            {/* Boutons dans le scroll — toujours accessibles en scrollant */}
-            <div
-              className="flex gap-3 pt-2"
-              style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
-            >
+            {/* Boutons dans le scroll */}
+            <div className="flex gap-3 pt-2">
               <Button variant="outline" onClick={onClose} disabled={loading} type="button">
                 Annuler
               </Button>
