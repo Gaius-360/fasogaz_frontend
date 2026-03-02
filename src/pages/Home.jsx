@@ -700,7 +700,7 @@ const Home = () => {
                   <div className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0">
                     <Phone className="h-3.5 w-3.5 xs:h-4 xs:w-4 sm:h-5 sm:w-5" />
                   </div>
-                  <span className="text-sm sm:text-base">+226 XX XX XX XX</span>
+                  <span className="text-sm sm:text-base">+226 01 21 28 17</span>
                 </div>
                 <div className="flex items-center gap-2 xs:gap-3 text-gray-400 justify-center sm:justify-start">
                   <div className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0">

@@ -4,8 +4,8 @@
 //
 // Comportement :
 // - 1ère visite          → modal après 5s
-// - "Plus tard"          → réapparaît dans 3 jours
-// - Overlay cliqué       → réapparaît dans 3 jours
+// - "Plus tard"          → réapparaît à la prochaine ouverture
+// - Overlay cliqué       → réapparaît à la prochaine ouverture
 // - "Installer" accepté  → ne réapparaît jamais
 // - App déjà installée   → jamais affiché
 // ==========================================
@@ -15,9 +15,9 @@ import { Download, Share, Smartphone } from 'lucide-react';
 import logo from '../../assets/logo_gazbf.png';
 
 // ── Constantes ──────────────────────────────────────────────
-const STORAGE_KEY       = 'fasogaz_pwa_install';
-const DELAY_MS          = 5000;   // délai avant affichage (5s)
-const REMIND_LATER_DAYS = 3;      // jours avant de réafficher
+const STORAGE_KEY    = 'fasogaz_pwa_install';
+const SESSION_KEY    = 'fasogaz_pwa_dismissed'; // sessionStorage : réinitialisé à chaque ouverture
+const DELAY_MS       = 5000;   // délai avant affichage (5s)
 
 // ── Helpers localStorage ─────────────────────────────────────
 const getStoredData = () => {
@@ -39,12 +39,11 @@ const setStoredData = (data) => {
 
 // ── Logique d'affichage ───────────────────────────────────────
 const shouldShowModal = () => {
+  // Si l'utilisateur a cliqué "Plus tard" dans CETTE session → ne pas réafficher
+  if (sessionStorage.getItem(SESSION_KEY) === 'true') return false;
+
   const data = getStoredData();
   if (data.installed === true) return false; // déjà installé
-  if (data.remindAfter) {
-    const remindDate = new Date(data.remindAfter);
-    if (new Date() < remindDate) return false; // dans le délai "plus tard"
-  }
   return true;
 };
 
@@ -112,7 +111,7 @@ const InstallPWAModal = () => {
           setStoredData({ ...getStoredData(), installed: true });
           setShowModal(false);
         } else {
-          // Refus de l'installation native → réafficher dans 3 jours
+          // Refus de l'installation native → réafficher à la prochaine ouverture
           handleRemindLater();
         }
       } catch {
@@ -128,11 +127,13 @@ const InstallPWAModal = () => {
     }
   };
 
-  // "Plus tard" → réafficher dans REMIND_LATER_DAYS jours
+  // "Plus tard" → marquer la session comme ignorée (réapparaîtra à la prochaine ouverture)
   const handleRemindLater = () => {
-    const remindAfter = new Date();
-    remindAfter.setDate(remindAfter.getDate() + REMIND_LATER_DAYS);
-    setStoredData({ ...getStoredData(), remindAfter: remindAfter.toISOString() });
+    try {
+      sessionStorage.setItem(SESSION_KEY, 'true');
+    } catch {
+      // sessionStorage indisponible → on ignore
+    }
     setShowModal(false);
   };
 
