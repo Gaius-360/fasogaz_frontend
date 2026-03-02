@@ -68,17 +68,11 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
         : await sellerService.createProduct(productData);
 
       if (response.success) {
-        setAlert({
-          type: 'success',
-          message: isEdit ? 'Produit mis à jour' : 'Produit créé avec succès'
-        });
+        setAlert({ type: 'success', message: isEdit ? 'Produit mis à jour' : 'Produit créé avec succès' });
         setTimeout(() => { onSuccess(); onClose(); }, 1000);
       }
     } catch (error) {
-      setAlert({
-        type: 'error',
-        message: error.response?.data?.message || 'Erreur lors de l\'opération'
-      });
+      setAlert({ type: 'error', message: error.response?.data?.message || 'Erreur lors de l\'opération' });
     } finally {
       setLoading(false);
     }
@@ -89,18 +83,9 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {/*
-        ─────────────────────────────────────────────────────────
-        Clé du fix mobile :
-        • On retire max-h fixe et on laisse le modal grandir
-          jusqu'à 100dvh (dynamic viewport height = exclut le
-          clavier virtuel sur iOS/Android).
-        • Le body scrollable absorbe le contenu, le footer reste
-          toujours visible au-dessus du clavier.
-        ─────────────────────────────────────────────────────────
-      */}
-      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col shadow-2xl overflow-hidden"
-        style={{ maxHeight: '100dvh' }}
+      <div
+        className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col shadow-2xl overflow-hidden"
+        style={{ maxHeight: '90dvh' }}
       >
 
         {/* Header */}
@@ -126,13 +111,15 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* Body scrollable */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
+        {/* Zone scrollable : champs + boutons à l'intérieur */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+
           {alert && (
-            <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-2" />
+            <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-4" />
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+
             {/* Type de bouteille */}
             <div>
               <label className="block text-sm font-bold text-neutral-900 mb-2">
@@ -205,29 +192,26 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
               helpText="Statut automatique: >5 = Disponible, 1-5 = Limité, 0 = Rupture"
             />
 
-            {/* Espace bas pour que le dernier champ reste visible au-dessus du footer */}
-            <div className="h-2" />
-          </form>
-        </div>
-
-        {/* Footer — toujours visible, colle au bas du viewport */}
-        <div className="p-5 border-t-2 border-neutral-100 bg-neutral-50 flex-shrink-0"
-          style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
-        >
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} disabled={loading}>
-              Annuler
-            </Button>
-            <Button
-              variant="gradient"
-              fullWidth
-              loading={loading}
-              onClick={handleSubmit}
-              className="h-12 text-base font-bold shadow-gazbf-lg"
+            {/* Boutons dans le scroll — toujours accessibles en scrollant */}
+            <div
+              className="flex gap-3 pt-2"
+              style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
             >
-              {isEdit ? 'Mettre à jour' : 'Créer le produit'}
-            </Button>
-          </div>
+              <Button variant="outline" onClick={onClose} disabled={loading} type="button">
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                variant="gradient"
+                fullWidth
+                loading={loading}
+                className="h-12 text-base font-bold shadow-gazbf-lg"
+              >
+                {isEdit ? 'Mettre à jour' : 'Créer le produit'}
+              </Button>
+            </div>
+
+          </form>
         </div>
 
       </div>
