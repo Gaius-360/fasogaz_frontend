@@ -85,12 +85,19 @@ self.addEventListener('push', (event) => {
   const isUrgent = ['urgent', 'high'].includes(payload.priority)
 
   const options = {
-    body:               payload.message,
-    icon:               '/icons/icon-192x192.png',
-    badge:              '/icons/badge-72x72.png',
-    vibrate:            isUrgent ? [300, 100, 300, 100, 300] : [200, 100, 200],
-    tag:                payload.type || 'fasogaz-notif',
-    renotify:           true,
+    body:  payload.message,
+    icon:  '/icons/icon-192x192.png',
+    badge: '/icons/badge-72x72.png',
+    vibrate: isUrgent ? [300, 100, 300, 100, 300] : [200, 100, 200],
+
+    // ✅ FIX 1 : tag unique par notification pour éviter les collisions
+    // Un tag partagé (ex: 'fasogaz-notif') écrase la notif précédente
+    // et peut bloquer renotify sur certains Android
+    tag: `${payload.type}-${payload.notificationId || Date.now()}`,
+
+    // ✅ FIX 2 : false car le tag est déjà unique — renotify n'a plus de sens
+    renotify: false,
+
     requireInteraction: isUrgent,
     silent:             false,
     timestamp:          Date.now(),
@@ -102,6 +109,10 @@ self.addEventListener('push', (event) => {
     actions: getActions(payload.type),
   }
 
+  // ✅ FIX 3 : Promise explicite passée à waitUntil
+  // En background, le SW peut être tué avant que showNotification se resolve.
+  // On s'assure que la Promise est bien enchaînée pour que le navigateur
+  // maintienne le SW en vie le temps d'afficher la notification.
   event.waitUntil(
     self.registration.showNotification(`${emoji} ${payload.title}`, options)
   )
