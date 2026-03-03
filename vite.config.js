@@ -4,7 +4,6 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { resolve } from 'path'
 import { copyFileSync, existsSync } from 'fs'
 
-// Plugin pour copier _redirects dans le dist après le build
 const copyRedirects = () => ({
   name: 'copy-redirects',
   closeBundle() {
@@ -40,16 +39,14 @@ export default defineConfig(({ mode }) => {
           start_url:        '/',
           scope:            '/',
           display:          'standalone',
-
           background_color: '#0a0a0a',
           theme_color:      '#0a0a0a',
-
-          orientation: 'portrait',
-          lang:        'fr',
-          categories:  ['shopping', 'utilities'],
+          orientation:      'portrait',
+          lang:             'fr',
+          categories:       ['shopping', 'utilities'],
 
           icons: [
-            { src: '/icons/icon-72x72.png',          sizes: '72x72',   type: 'image/png' },
+            { src: '/icons/icon-72x72.png',         sizes: '72x72',   type: 'image/png' },
             { src: '/icons/icon-96x96.png',          sizes: '96x96',   type: 'image/png' },
             { src: '/icons/icon-128x128.png',        sizes: '128x128', type: 'image/png' },
             { src: '/icons/icon-144x144.png',        sizes: '144x144', type: 'image/png' },
@@ -63,7 +60,10 @@ export default defineConfig(({ mode }) => {
 
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          injectionPoint: undefined,
+          // ✅ FIX CRITIQUE : injectionPoint: undefined supprimé
+          // Sans ça, Workbox ne peut pas injecter self.__WB_MANIFEST dans sw.js
+          // Le SW compilait mais plantait silencieusement en background sur mobile
+          // => aucun événement 'push' reçu hors de la plateforme
         },
 
         devOptions: {
