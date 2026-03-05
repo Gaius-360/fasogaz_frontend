@@ -1,6 +1,7 @@
 // ==========================================
 // FICHIER: src/pages/admin/AdminClientDetail.jsx
 // VERSION RESPONSIVE - CORRIGÉE
+// ✅ AJOUT: Bouton + modale "Réinitialiser mot de passe"
 // ==========================================
 
 import React, { useState, useEffect } from 'react';
@@ -16,10 +17,13 @@ import {
   Ban,
   CheckCircle,
   Trash2,
-  CreditCard
+  CreditCard,
+  Lock,
+  X
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Alert from '../../components/common/Alert';
+import Input from '../../components/common/Input';
 import { formatPrice, formatDateTime } from '../../utils/helpers';
 import useAdmin from '../../hooks/useAdmin';
 
@@ -34,12 +38,18 @@ const AdminClientDetail = () => {
     getClientById,
     blockClient,
     unblockClient,
-    deleteClient
+    deleteClient,
+    resetUserPassword  // ✅ nouveau hook exposé
   } = useAdmin();
 
   const [client, setClient]       = useState(null);
   const [alert, setAlert]         = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // ── État modale reset MDP ──
+  const [showResetModal, setShowResetModal]   = useState(false);
+  const [newPassword, setNewPassword]         = useState('');
+  const [resetLoading, setResetLoading]       = useState(false);
 
   useEffect(() => { loadClientDetail(); }, [id]);
 
@@ -77,8 +87,41 @@ const AdminClientDetail = () => {
     if (confirmation !== 'SUPPRIMER') return;
     try {
       const response = await deleteClient(client.id);
-      if (response?.success) { setAlert({ type: 'success', message: 'Client supprimé' }); setTimeout(() => navigate('/admin/clients'), 2000); }
+      if (response?.success) {
+        setAlert({ type: 'success', message: 'Client supprimé' });
+        setTimeout(() => navigate('/admin/clients'), 2000);
+      }
     } catch (err) { setAlert({ type: 'error', message: err.message || 'Erreur lors de la suppression' }); }
+  };
+
+  // ── Réinitialisation mot de passe ──
+  const handleResetPassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setAlert({ type: 'error', message: 'Le mot de passe doit contenir au moins 6 caractères' });
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const response = await resetUserPassword(client.id, newPassword);
+      if (response?.success) {
+        setAlert({
+          type: 'success',
+          message: `Mot de passe réinitialisé. Communiquez le nouveau mot de passe à ${client.firstName} via WhatsApp.`
+        });
+        setShowResetModal(false);
+        setNewPassword('');
+      }
+    } catch (err) {
+      setAlert({ type: 'error', message: err.message || 'Erreur lors de la réinitialisation' });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const closeResetModal = () => {
+    setShowResetModal(false);
+    setNewPassword('');
   };
 
   // ── Loading ──
@@ -111,18 +154,18 @@ const AdminClientDetail = () => {
     { key: 'addresses',  label: `Adresses (${client.addresses?.length || 0})` },
   ];
 
-  // ── CORRECTION : Calcul des statistiques depuis client.orders ──
-  const totalOrders = client.orders?.length || 0;
-  const completedOrders = client.orders?.filter(o => o.status === 'completed')?.length || 0;
-  const totalSpent = client.orders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0;
-  const avgOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
+  // ── Statistiques depuis client.orders ──
+  const totalOrders      = client.orders?.length || 0;
+  const completedOrders  = client.orders?.filter(o => o.status === 'completed')?.length || 0;
+  const totalSpent       = client.orders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0;
+  const avgOrderValue    = totalOrders > 0 ? totalSpent / totalOrders : 0;
 
   return (
     <div className="space-y-4">
 
-      {/* ── En-tête de page : retour + nom + boutons action ── */}
+      {/* ── En-tête : retour + nom + boutons action ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Côté gauche : arrow + nom */}
+        {/* Côté gauche */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Button variant="ghost" onClick={() => navigate('/admin/clients')} className="p-1.5 sm:p-2">
             <ArrowLeft className="h-5 w-5" />
@@ -138,8 +181,18 @@ const AdminClientDetail = () => {
           </div>
         </div>
 
-        {/* Côté droit : boutons action — empilés sur mobile, en ligne sur sm+ */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Côté droit : boutons action */}
+        <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+          {/* ✅ NOUVEAU: Bouton reset MDP */}
+          <Button
+            variant="outline"
+            onClick={() => setShowResetModal(true)}
+            disabled={loading}
+            className="text-sm sm:text-base"
+          >
+            <Lock className="h-4 w-4 mr-1.5" /> Réinitialiser MDP
+          </Button>
+
           {!client.isBlocked ? (
             <Button variant="outline" onClick={handleBlock} disabled={loading} className="text-sm sm:text-base">
               <Ban className="h-4 w-4 mr-1.5" /> Bloquer
@@ -149,6 +202,7 @@ const AdminClientDetail = () => {
               <CheckCircle className="h-4 w-4 mr-1.5" /> Débloquer
             </Button>
           )}
+
           <Button variant="danger" onClick={handleDelete} disabled={loading} className="text-sm sm:text-base">
             <Trash2 className="h-4 w-4 mr-1.5" /> Supprimer
           </Button>
@@ -181,9 +235,8 @@ const AdminClientDetail = () => {
           )}
         </div>
 
-        {/* Info personnelle + abonnement : 1 col mobile, 2 col md+ */}
+        {/* Info personnelle + abonnement */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {/* Infos personnelles */}
           <div>
             <h3 className="font-semibold text-gray-900 mb-3">Informations personnelles</h3>
             <div className="text-sm space-y-2.5">
@@ -202,14 +255,22 @@ const AdminClientDetail = () => {
             </div>
           </div>
 
-          {/* Abonnement */}
           {client.subscription && (
             <div>
               <h3 className="font-semibold text-gray-900 mb-3">Abonnement</h3>
               <div className="text-sm space-y-2">
-                <p className="text-gray-600"><strong>Plan :</strong> {client.subscription.planType === 'weekly' ? '1 semaine' : '1 mois'}</p>
-                <p className="text-gray-600"><strong>Début :</strong> {formatDateTime(client.subscription.startDate).split(' à ')[0]}</p>
-                <p className="text-gray-600"><strong>Expire :</strong> {formatDateTime(client.subscription.endDate).split(' à ')[0]}</p>
+                <p className="text-gray-600">
+                  <strong>Plan :</strong>{' '}
+                  {client.subscription.planType === 'weekly' ? '1 semaine' : '1 mois'}
+                </p>
+                <p className="text-gray-600">
+                  <strong>Début :</strong>{' '}
+                  {formatDateTime(client.subscription.startDate).split(' à ')[0]}
+                </p>
+                <p className="text-gray-600">
+                  <strong>Expire :</strong>{' '}
+                  {formatDateTime(client.subscription.endDate).split(' à ')[0]}
+                </p>
               </div>
             </div>
           )}
@@ -223,13 +284,13 @@ const AdminClientDetail = () => {
           </div>
         )}
 
-        {/* ── Statistiques : 2 cols mobile, 4 cols desktop ── */}
+        {/* Statistiques */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-5 mt-5 border-t">
           {[
-            { Icon: ShoppingCart,  bg: 'bg-blue-100',   color: 'text-blue-600',   value: totalOrders,      label: 'Commandes',     isPrice: false },
-            { Icon: CheckCircle,   bg: 'bg-green-100',  color: 'text-green-600',  value: completedOrders,  label: 'Complétées',    isPrice: false },
-            { Icon: DollarSign,    bg: 'bg-purple-100', color: 'text-purple-600', value: totalSpent,       label: 'Total dépensé', isPrice: true  },
-            { Icon: CreditCard,    bg: 'bg-yellow-100', color: 'text-yellow-600', value: avgOrderValue,    label: 'Panier moyen',  isPrice: true  },
+            { Icon: ShoppingCart,  bg: 'bg-blue-100',   color: 'text-blue-600',   value: totalOrders,     label: 'Commandes',     isPrice: false },
+            { Icon: CheckCircle,   bg: 'bg-green-100',  color: 'text-green-600',  value: completedOrders, label: 'Complétées',    isPrice: false },
+            { Icon: DollarSign,    bg: 'bg-purple-100', color: 'text-purple-600', value: totalSpent,      label: 'Total dépensé', isPrice: true  },
+            { Icon: CreditCard,    bg: 'bg-yellow-100', color: 'text-yellow-600', value: avgOrderValue,   label: 'Panier moyen',  isPrice: true  },
           ].map((s, i) => (
             <div key={i} className="text-center">
               <div className={`flex items-center justify-center w-11 h-11 ${s.bg} rounded-lg mx-auto mb-2`}>
@@ -244,9 +305,8 @@ const AdminClientDetail = () => {
         </div>
       </div>
 
-      {/* ── Tabs : scroll horizontal sur petit écran ── */}
+      {/* ── Tabs ── */}
       <div className="bg-white rounded-lg border overflow-hidden">
-        {/* Tab bar avec scroll horizontal */}
         <div className="border-b overflow-x-auto">
           <div className="flex min-w-max sm:min-w-0">
             {tabs.map(tab => (
@@ -265,10 +325,9 @@ const AdminClientDetail = () => {
           </div>
         </div>
 
-        {/* Contenu tabs */}
         <div className="p-4 sm:p-6">
 
-          {/* ── Tab : Vue d'ensemble ── */}
+          {/* ── Vue d'ensemble ── */}
           {activeTab === 'overview' && (
             <div className="space-y-4 sm:space-y-6">
               <div>
@@ -285,7 +344,9 @@ const AdminClientDetail = () => {
                     <p className="text-2xl font-bold text-gray-900">
                       {totalOrders > 0
                         ? (totalOrders /
-                           Math.max(1, Math.floor((Date.now() - new Date(client.createdAt)) / (7 * 86400000)))).toFixed(1)
+                           Math.max(1, Math.floor(
+                             (Date.now() - new Date(client.createdAt)) / (7 * 86400000)
+                           ))).toFixed(1)
                         : 0}
                     </p>
                     <p className="text-xs text-gray-500">commandes / semaine</p>
@@ -297,14 +358,18 @@ const AdminClientDetail = () => {
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm font-medium text-blue-800 mb-1">Dernière commande</p>
                   <p className="text-sm text-blue-700">
-                    {formatDateTime(client.orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].createdAt)}
+                    {formatDateTime(
+                      client.orders
+                        .slice()
+                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].createdAt
+                    )}
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* ── Tab : Commandes ── */}
+          {/* ── Commandes ── */}
           {activeTab === 'orders' && (
             <div>
               {client.orders && client.orders.length > 0 ? (
@@ -312,15 +377,17 @@ const AdminClientDetail = () => {
                   {client.orders.map((order) => (
                     <div key={order.id} className="flex items-center justify-between p-3 sm:p-4 border rounded-lg gap-3">
                       <div className="min-w-0">
-                        <h4 className="font-semibold text-gray-900 truncate">Commande #{order.orderNumber}</h4>
+                        <h4 className="font-semibold text-gray-900 truncate">
+                          Commande #{order.orderNumber}
+                        </h4>
                         <p className="text-sm text-gray-600">{formatDateTime(order.createdAt)}</p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-lg font-bold text-primary-600">{formatPrice(order.total)}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          order.status === 'completed'  ? 'bg-green-100 text-green-800' :
-                          order.status === 'cancelled'  ? 'bg-red-100 text-red-800'    :
-                                                          'bg-yellow-100 text-yellow-800'
+                          order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          order.status === 'cancelled' ? 'bg-red-100 text-red-800'    :
+                                                         'bg-yellow-100 text-yellow-800'
                         }`}>
                           {order.status}
                         </span>
@@ -337,7 +404,7 @@ const AdminClientDetail = () => {
             </div>
           )}
 
-          {/* ── Tab : Adresses ── */}
+          {/* ── Adresses ── */}
           {activeTab === 'addresses' && (
             <div>
               {client.addresses && client.addresses.length > 0 ? (
@@ -349,7 +416,9 @@ const AdminClientDetail = () => {
                           <div className="flex items-center gap-2 flex-wrap mb-1.5">
                             <h4 className="font-semibold text-gray-900">{address.label}</h4>
                             {address.isDefault && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Par défaut</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                                Par défaut
+                              </span>
                             )}
                           </div>
                           <p className="text-sm text-gray-600 break-words">{address.fullAddress}</p>
@@ -370,6 +439,82 @@ const AdminClientDetail = () => {
           )}
         </div>
       </div>
+
+      {/* ════ MODALE RESET MOT DE PASSE ════ */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+
+            {/* En-tête modale */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Lock className="h-5 w-5 text-orange-600" />
+                </div>
+                <h3 className="font-bold text-gray-900">Réinitialiser le mot de passe</h3>
+              </div>
+              <button
+                onClick={closeResetModal}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Info client */}
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Client : <strong className="text-gray-900">
+                  {client.firstName} {client.lastName}
+                </strong>
+              </p>
+              <p className="text-sm text-gray-600">
+                Tél : <strong className="text-gray-900">{client.phone}</strong>
+              </p>
+            </div>
+
+            {/* Avertissement flux WhatsApp */}
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-800 leading-relaxed">
+                ⚠️ Assurez-vous d'avoir vérifié l'identité du client via WhatsApp avant
+                de réinitialiser son mot de passe. Communiquez-lui ensuite le nouveau
+                mot de passe temporaire via la même conversation.
+              </p>
+            </div>
+
+            {/* Champ nouveau MDP */}
+            <Input
+              label="Nouveau mot de passe temporaire"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              icon={Lock}
+              placeholder="Minimum 6 caractères"
+            />
+
+            {/* Boutons */}
+            <div className="flex gap-3 mt-5">
+              <Button
+                variant="outline"
+                fullWidth
+                onClick={closeResetModal}
+                disabled={resetLoading}
+              >
+                Annuler
+              </Button>
+              <Button
+                variant="primary"
+                fullWidth
+                loading={resetLoading}
+                onClick={handleResetPassword}
+              >
+                Confirmer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

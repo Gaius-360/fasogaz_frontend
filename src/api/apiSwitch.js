@@ -2,6 +2,7 @@
 // FICHIER: src/api/apiSwitch.js (VERSION COMPLÈTE)
 // Configuration API avec support multi-rôles (clients, revendeurs, admins, agents)
 // ✅ AJOUT: Routes push notifications
+// ✅ AJOUT: admin.clients.resetPassword
 // ==========================================
 
 import axios from 'axios';
@@ -95,8 +96,8 @@ export const api = {
     verifyOTP: (data) => userApi.post('/auth/verify-otp', data),
     resendOTP: (data) => userApi.post('/auth/resend-otp', data),
     login: (data) => userApi.post('/auth/login', data),
-    forgotPassword: (data) => userApi.post('/auth/forgot-password', data),
-    resetPassword: (data) => userApi.post('/auth/reset-password', data),
+    // ✅ forgotPassword et resetPassword supprimés du flux utilisateur
+    // → remplacés par le contact WhatsApp support
     getMe: () => userApi.get('/auth/me'),
     updateProfile: (data) => userApi.put('/auth/update-profile', data),
     updateDeliverySettings: (data) => userApi.put('/auth/update-delivery', data),
@@ -123,16 +124,13 @@ export const api = {
   },
 
   // ==========================================
-  // ✅ PUSH NOTIFICATIONS (NOUVEAU)
+  // ✅ PUSH NOTIFICATIONS
   // ==========================================
   push: {
-    // Enregistrer l'abonnement push de l'appareil
     subscribe: (data) =>
       userApi.post('/push/subscribe', data),
-    // Se désabonner
     unsubscribe: (data) =>
       userApi.delete('/push/unsubscribe', { data }),
-    // Vérifier si l'appareil est abonné côté serveur
     getStatus: () =>
       userApi.get('/push/status'),
   },
@@ -294,6 +292,9 @@ export const api = {
         adminApi.put(`/admin/sellers/${id}/suspend`, { reason, duration }),
       reactivate: (id) => adminApi.put(`/admin/sellers/${id}/reactivate`),
       delete: (id) => adminApi.delete(`/admin/sellers/${id}`),
+      // ✅ Réinitialisation MDP revendeur par l'admin
+      resetPassword: (id, newPassword) =>
+        adminApi.put(`/admin/users/${id}/reset-password`, { newPassword }),
     },
 
     clients: {
@@ -302,6 +303,9 @@ export const api = {
       block: (id, reason) => adminApi.put(`/admin/clients/${id}/block`, { reason }),
       unblock: (id) => adminApi.put(`/admin/clients/${id}/unblock`),
       delete: (id) => adminApi.delete(`/admin/clients/${id}`),
+      // ✅ NOUVEAU: Réinitialisation MDP client par l'admin
+      resetPassword: (id, newPassword) =>
+        adminApi.put(`/admin/users/${id}/reset-password`, { newPassword }),
     },
 
     agents: {

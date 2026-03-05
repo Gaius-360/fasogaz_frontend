@@ -1,19 +1,14 @@
 // ==========================================
 // FICHIER: src/components/layout/AgentLayout.jsx
 // Layout pour les agents terrain
+// ✅ FIX: logo avec skeleton + fallback (LogoImage)
 // ==========================================
 
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Link2,
-  User,
-  LogOut,
-  Menu,
-  X
-} from 'lucide-react';
+import { LayoutDashboard, Link2, User, LogOut, Menu, X } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
+import LogoImage from '../common/LogoImage';
 
 const AgentLayout = () => {
   const navigate = useNavigate();
@@ -22,9 +17,9 @@ const AgentLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const menuItems = [
-    { path: '/agent/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/agent/invitations', icon: Link2, label: 'Mes Invitations' },
-    { path: '/agent/profile', icon: User, label: 'Mon Profil' }
+    { path: '/agent/dashboard',   icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/agent/invitations', icon: Link2,           label: 'Mes Invitations' },
+    { path: '/agent/profile',     icon: User,            label: 'Mon Profil' }
   ];
 
   const handleLogout = () => {
@@ -49,18 +44,23 @@ const AgentLayout = () => {
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-4 border-b border-white/20">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <span className="text-orange-600 font-bold text-lg">AG</span>
+              {/* ✅ FIX: LogoImage avec fallback sur fond coloré */}
+              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                <LogoImage
+                  src="/logo_gazbf.png"
+                  alt="FasoGaz"
+                  className="w-full h-full object-contain"
+                  wrapperClass="w-full h-full"
+                  skeletonClass="rounded-lg"
+                  fallbackText="FG"
+                />
               </div>
               <div>
                 <h1 className="text-white font-bold">Agent FasoGaz</h1>
                 <p className="text-white/70 text-xs">{user?.agentCode}</p>
               </div>
             </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-white"
-            >
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white">
               <X className="h-6 w-6" />
             </button>
           </div>
@@ -70,20 +70,13 @@ const AgentLayout = () => {
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
-
               return (
                 <NavLink
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
-                  className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg
-                    transition-all duration-200
-                    ${isActive
-                      ? 'bg-white text-orange-600 shadow-lg'
-                      : 'text-white hover:bg-white/10'
-                    }
-                  `}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
+                    ${isActive ? 'bg-white text-orange-600 shadow-lg' : 'text-white hover:bg-white/10'}`}
                 >
                   <Icon className="h-5 w-5" />
                   <span className="font-medium">{item.label}</span>
@@ -99,12 +92,8 @@ const AgentLayout = () => {
                 <User className="h-5 w-5 text-orange-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-medium truncate">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-white/70 text-xs truncate">
-                  {user?.agentZone}
-                </p>
+                <p className="text-white font-medium truncate">{user?.firstName} {user?.lastName}</p>
+                <p className="text-white/70 text-xs truncate">{user?.agentZone}</p>
               </div>
             </div>
             <button
@@ -122,10 +111,7 @@ const AgentLayout = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-gray-600"
-          >
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-600">
             <Menu className="h-6 w-6" />
           </button>
 
@@ -137,9 +123,7 @@ const AgentLayout = () => {
 
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
-              <p className="text-sm font-medium text-gray-900">
-                {user?.firstName} {user?.lastName}
-              </p>
+              <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
               <p className="text-xs text-gray-500">{user?.agentCode}</p>
             </div>
           </div>
@@ -155,10 +139,7 @@ const AgentLayout = () => {
 
       {/* Overlay mobile */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
     </div>
   );

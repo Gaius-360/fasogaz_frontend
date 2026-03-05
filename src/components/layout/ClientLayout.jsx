@@ -1,6 +1,7 @@
 // ==========================================
 // FICHIER: src/components/layout/ClientLayout.jsx
 // Layout avec couleurs GAZBF - 100% Responsive (SANS DÉCONNEXION)
+// ✅ FIX: logo avec skeleton + fallback (LogoImage)
 // ==========================================
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
@@ -9,7 +10,7 @@ import {
   X, Settings, Phone, ArrowLeftRight
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
-import logo from '../../assets/logo_gazbf.png';
+import LogoImage, { FasoGazWordmark } from '../common/LogoImage';
 
 const ClientLayout = () => {
   const { user } = useAuthStore();
@@ -29,42 +30,35 @@ const ClientLayout = () => {
   return (
     <div className="min-h-screen bg-neutral-50">
       
-      {/* ==========================================
-          HEADER - Responsive avec gradient GAZBF
-          ========================================== */}
+      {/* ── HEADER ── */}
       <header className="bg-white shadow-md border-b-4 border-gradient-gazbf sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             
-            {/* Logo - Adapté mobile/desktop */}
+            {/* Logo - ✅ FIX: LogoImage avec skeleton + fallback */}
             <div 
               className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
               onClick={() => navigate('/client/map')}
             >
               <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl overflow-hidden ring-2 ring-primary-200 group-hover:ring-primary-400 transition-all">
-                <img 
-                  src={logo} 
-                  alt="GAZBF Logo" 
+                <LogoImage
+                  src="/logo_gazbf.png"
+                  alt="GAZBF Logo"
                   className="w-full h-full object-contain group-hover:scale-110 transition-transform"
+                  wrapperClass="w-full h-full"
+                  skeletonClass="rounded-lg"
+                  fallbackText="FG"
                 />
               </div>
               <div>
-                <h1 className="text-base sm:text-xl font-bold">
-                  <span className="text-red-600">F</span>
-                  <span className="text-yellow-500">a</span>
-                  <span className="text-yellow-500">s</span>
-                  <span className="text-green-600">o</span>
-                  <span className="text-red-600">G</span>
-                  <span className="text-yellow-500">a</span>
-                  <span className="text-green-600">z</span>
-                </h1>
+                <FasoGazWordmark textSize="text-base sm:text-xl" />
                 <p className="text-[10px] sm:text-xs text-neutral-600 hidden sm:block font-medium">
                   Gaz au Burkina Faso
                 </p>
               </div>
             </div>
 
-            {/* Navigation Desktop - Caché sur mobile */}
+            {/* Navigation Desktop */}
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.to;
@@ -72,14 +66,11 @@ const ClientLayout = () => {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    className={`
-                      flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-all
-                      text-xs lg:text-sm font-medium
+                    className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-all text-xs lg:text-sm font-medium
                       ${isActive
                         ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white font-bold shadow-gazbf'
                         : 'text-neutral-700 hover:bg-primary-50 hover:text-primary-600'
-                      }
-                    `}
+                      }`}
                   >
                     <item.icon className="h-4 w-4 lg:h-5 lg:w-5" />
                     <span className="hidden lg:inline">{item.label}</span>
@@ -88,7 +79,7 @@ const ClientLayout = () => {
               })}
             </nav>
 
-            {/* User Actions Desktop - Caché sur mobile */}
+            {/* User Actions Desktop */}
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
               <button
                 onClick={() => navigate('/client/settings')}
@@ -112,7 +103,6 @@ const ClientLayout = () => {
                 </div>
               </div>
 
-              {/* Lien retour à la page login - Desktop */}
               <button
                 onClick={() => navigate('/login')}
                 className="p-2 text-neutral-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
@@ -135,30 +125,22 @@ const ClientLayout = () => {
             </button>
           </div>
 
-          {/* Mobile Profile Menu - Dropdown */}
+          {/* Mobile Profile Menu */}
           {showProfileMenu && (
             <>
-              {/* Overlay */}
               <div 
                 className="md:hidden fixed inset-0 bg-black/30 z-40 animate-fade-in"
                 onClick={() => setShowProfileMenu(false)}
               />
-              
-              {/* Profile Menu Card */}
               <div className="md:hidden absolute top-16 right-3 w-80 max-w-[calc(100vw-24px)] bg-white rounded-2xl shadow-2xl z-50 animate-slide-down border-2 border-primary-200">
                 <div className="p-5">
-                  {/* Header avec bouton fermer */}
                   <div className="flex items-center justify-between mb-4 pb-4 border-b-2 border-neutral-100">
                     <h3 className="text-lg font-bold text-gray-900">Mon Profil</h3>
-                    <button
-                      onClick={() => setShowProfileMenu(false)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
+                    <button onClick={() => setShowProfileMenu(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                       <X className="h-5 w-5 text-gray-500" />
                     </button>
                   </div>
 
-                  {/* User Info Card */}
                   <div className="bg-gradient-to-br from-primary-50 to-secondary-50 rounded-xl p-4 mb-4">
                     <div className="flex items-center gap-4 mb-3">
                       <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-full flex items-center justify-center ring-4 ring-white shadow-lg">
@@ -167,17 +149,13 @@ const ClientLayout = () => {
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-lg font-bold text-gray-900 truncate">
-                          {user?.firstName} {user?.lastName}
-                        </p>
+                        <p className="text-lg font-bold text-gray-900 truncate">{user?.firstName} {user?.lastName}</p>
                         <p className="text-sm text-gray-600 flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           {user?.phone}
                         </p>
                       </div>
                     </div>
-                    
-                    {/* Info supplémentaires */}
                     <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-primary-200">
                       <div className="text-center">
                         <p className="text-xs text-gray-600">Ville</p>
@@ -190,41 +168,16 @@ const ClientLayout = () => {
                     </div>
                   </div>
 
-                  {/* Quick Actions */}
                   <div className="space-y-2">
-                    <button
-                      onClick={() => {
-                        navigate('/client/profile');
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium"
-                    >
-                      <User className="h-5 w-5" />
-                      <span>Modifier le profil</span>
+                    <button onClick={() => { navigate('/client/profile'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium">
+                      <User className="h-5 w-5" /><span>Modifier le profil</span>
                     </button>
-                    
-                    <button
-                      onClick={() => {
-                        navigate('/client/settings');
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium"
-                    >
-                      <Settings className="h-5 w-5" />
-                      <span>Paramètres</span>
+                    <button onClick={() => { navigate('/client/settings'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium">
+                      <Settings className="h-5 w-5" /><span>Paramètres</span>
                     </button>
-
-                    {/* Séparateur + lien retour connexion - Mobile */}
                     <div className="pt-3 mt-1 border-t border-neutral-100">
-                      <button
-                        onClick={() => {
-                          navigate('/login');
-                          setShowProfileMenu(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-neutral-400 hover:bg-neutral-50 hover:text-neutral-600 rounded-xl transition-colors font-medium"
-                      >
-                        <ArrowLeftRight className="h-5 w-5" />
-                        <span>Retour à la connexion</span>
+                      <button onClick={() => { navigate('/login'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-neutral-400 hover:bg-neutral-50 hover:text-neutral-600 rounded-xl transition-colors font-medium">
+                        <ArrowLeftRight className="h-5 w-5" /><span>Retour à la connexion</span>
                       </button>
                     </div>
                   </div>
@@ -235,71 +188,29 @@ const ClientLayout = () => {
         </div>
       </header>
 
-      {/* Styles pour les animations */}
       <style>{`
-        @keyframes slide-down {
-          from {
-            transform: translateY(-10px);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        .animate-slide-down {
-          animation: slide-down 0.2s ease-out;
-        }
-
-        .animate-fade-in {
-          animation: fade-in 0.2s ease-out;
-        }
+        @keyframes slide-down { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-slide-down { animation: slide-down 0.2s ease-out; }
+        .animate-fade-in { animation: fade-in 0.2s ease-out; }
       `}</style>
 
-      {/* ==========================================
-          MAIN CONTENT - Padding adaptatif
-          ========================================== */}
+      {/* ── MAIN CONTENT ── */}
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-20 md:pb-6">
         <Outlet />
       </main>
 
-      {/* ==========================================
-          BOTTOM NAVIGATION - Mobile uniquement
-          ========================================== */}
+      {/* ── BOTTOM NAVIGATION mobile ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-neutral-200 shadow-lg z-50">
         <div className="grid grid-cols-5 gap-0.5 px-1 py-1.5 safe-area-inset-bottom">
           {navItems.map((item) => {
             const isActive = location.pathname === item.to;
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className="flex flex-col items-center justify-center py-1.5 rounded-lg transition-all touch-manipulation"
-              >
-                <div className={`
-                  p-1.5 rounded-lg
-                  ${isActive ? 'bg-gradient-to-br from-primary-500 to-secondary-500' : ''}
-                `}>
-                  <item.icon 
-                    className={`h-5 w-5 mb-0.5 ${
-                      isActive ? 'text-white' : 'text-neutral-400'
-                    }`} 
-                  />
+              <NavLink key={item.to} to={item.to} className="flex flex-col items-center justify-center py-1.5 rounded-lg transition-all touch-manipulation">
+                <div className={`p-1.5 rounded-lg ${isActive ? 'bg-gradient-to-br from-primary-500 to-secondary-500' : ''}`}>
+                  <item.icon className={`h-5 w-5 mb-0.5 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
                 </div>
-                <span className={`
-                  text-[10px] font-semibold leading-tight
-                  ${isActive ? 'text-primary-600' : 'text-neutral-500'}
-                `}>
+                <span className={`text-[10px] font-semibold leading-tight ${isActive ? 'text-primary-600' : 'text-neutral-500'}`}>
                   {item.label}
                 </span>
               </NavLink>

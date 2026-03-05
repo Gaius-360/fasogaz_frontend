@@ -1,44 +1,46 @@
 // ==========================================
-// FICHIER: src/pages/auth/Login.jsx (VERSION RESPONSIVE)
+// FICHIER: src/pages/auth/Login.jsx
+// ✅ Mot de passe oublié → WhatsApp support (plus d'OTP)
 // ✅ RESPONSIVE: Optimisé pour mobile (320px+), tablette et desktop
+// ✅ FIX: logo avec skeleton + fallback (LogoImage)
 // ==========================================
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Phone, Lock, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Phone, Lock, Loader2, ArrowLeft, MessageCircle } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Alert from '../../components/common/Alert';
 import useAuthStore from '../../store/authStore';
 import { api } from '../../api/apiSwitch';
-import logo from '../../assets/logo_gazbf.png';
+import LogoImage, { FasoGazWordmark } from '../../components/common/LogoImage';
+
+// ✅ Numéro WhatsApp du support (format international sans +)
+const SUPPORT_WHATSAPP = '22601212817';
+
+const buildWhatsAppMessage = () =>
+  encodeURIComponent(
+    "Bonjour, j'ai oublié mon mot de passe FasoGaz.\n" +
+    "Mon numéro enregistré est : +226"
+  );
 
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
 
-  const [mode, setMode] = useState('login'); // 'login' | 'forgot' | 'reset'
-  
+  const [mode, setMode] = useState('login');
+
   const [formData, setFormData] = useState({
     phone: '+226',
     password: ''
   });
 
-  const [resetData, setResetData] = useState({
-    phone: '+226',
-    otp: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState(null);
 
-  // ✅ FIX: Suppression des espaces dans le numéro de téléphone
   const sanitizePhone = (value) => value.replace(/\s/g, '');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
     if (name === 'phone') {
       const sanitized = sanitizePhone(value);
       if (!sanitized.startsWith('+226')) {
@@ -51,196 +53,40 @@ const Login = () => {
     }
   };
 
-  const handleResetChange = (e) => {
-    const { name, value } = e.target;
-    
-    if (name === 'phone') {
-      const sanitized = sanitizePhone(value);
-      if (!sanitized.startsWith('+226')) {
-        setResetData(prev => ({ ...prev, phone: '+226' }));
-      } else {
-        setResetData(prev => ({ ...prev, [name]: sanitized }));
-      }
-    } else {
-      setResetData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  // ==========================================
-  // CONNEXION NORMALE
-  // ==========================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     setAlert(null);
 
     if (!formData.phone || formData.phone.length < 12) {
-      setAlert({
-        type: 'error',
-        message: 'Numéro de téléphone invalide (format: +226XXXXXXXX)'
-      });
+      setAlert({ type: 'error', message: 'Numéro de téléphone invalide (format: +226XXXXXXXX)' });
       return;
     }
 
     if (!formData.password || formData.password.length < 6) {
-      setAlert({
-        type: 'error',
-        message: 'Mot de passe requis (minimum 6 caractères)'
-      });
+      setAlert({ type: 'error', message: 'Mot de passe requis (minimum 6 caractères)' });
       return;
     }
 
     setLoading(true);
 
     try {
-      console.log('📤 Envoi login:', formData);
-      
       const response = await api.auth.login({
         phone: formData.phone,
         password: formData.password
       });
 
-      console.log('📥 Réponse login:', response);
-
       if (response.success && response.data) {
         const { token, user } = response.data;
-
-        console.log('✅ Token:', token);
-        console.log('✅ User:', user);
-        
         login(token, user);
-
-        setAlert({
-          type: 'success',
-          message: 'Connexion réussie ! Redirection...'
-        });
-
+        setAlert({ type: 'success', message: 'Connexion réussie ! Redirection...' });
         setTimeout(() => {
-          if (user.role === 'client') {
-            navigate('/client/map');
-          } else if (user.role === 'revendeur') {
-            navigate('/seller/dashboard');
-          } else {
-            navigate('/');
-          }
+          if (user.role === 'client') navigate('/client/map');
+          else if (user.role === 'revendeur') navigate('/seller/dashboard');
+          else navigate('/');
         }, 1000);
       }
     } catch (error) {
-      console.error('❌ Erreur login:', error);
-      
-      const errorMessage = error.message || 'Erreur lors de la connexion';
-
-      setAlert({
-        type: 'error',
-        message: errorMessage
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==========================================
-  // DEMANDE OTP POUR RÉINITIALISATION
-  // ==========================================
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    setAlert(null);
-
-    if (!resetData.phone || resetData.phone.length < 12) {
-      setAlert({
-        type: 'error',
-        message: 'Numéro de téléphone invalide'
-      });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await api.auth.forgotPassword({
-        phone: resetData.phone
-      });
-
-      if (response.success) {
-        setAlert({
-          type: 'success',
-          message: 'Code OTP envoyé par SMS'
-        });
-        setMode('reset');
-      }
-    } catch (error) {
-      console.error('❌ Erreur forgot password:', error);
-      setAlert({
-        type: 'error',
-        message: error.message || 'Erreur lors de l\'envoi du code'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==========================================
-  // RÉINITIALISATION AVEC OTP
-  // ==========================================
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    setAlert(null);
-
-    if (!resetData.otp || resetData.otp.length !== 6) {
-      setAlert({
-        type: 'error',
-        message: 'Code OTP invalide (6 chiffres)'
-      });
-      return;
-    }
-
-    if (!resetData.newPassword || resetData.newPassword.length < 6) {
-      setAlert({
-        type: 'error',
-        message: 'Le nouveau mot de passe doit contenir au moins 6 caractères'
-      });
-      return;
-    }
-
-    if (resetData.newPassword !== resetData.confirmPassword) {
-      setAlert({
-        type: 'error',
-        message: 'Les mots de passe ne correspondent pas'
-      });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await api.auth.resetPassword({
-        phone: resetData.phone,
-        otp: resetData.otp,
-        newPassword: resetData.newPassword
-      });
-
-      if (response.success) {
-        setAlert({
-          type: 'success',
-          message: 'Mot de passe réinitialisé avec succès ! Vous pouvez vous connecter.'
-        });
-
-        setTimeout(() => {
-          setMode('login');
-          setResetData({
-            phone: '+226',
-            otp: '',
-            newPassword: '',
-            confirmPassword: ''
-          });
-          setAlert(null);
-        }, 2000);
-      }
-    } catch (error) {
-      console.error('❌ Erreur reset password:', error);
-      setAlert({
-        type: 'error',
-        message: error.message || 'Erreur lors de la réinitialisation'
-      });
+      setAlert({ type: 'error', message: error.message || 'Erreur lors de la connexion' });
     } finally {
       setLoading(false);
     }
@@ -249,29 +95,26 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-3 sm:p-4 md:p-6">
       <div className="max-w-md w-full">
-        {/* Logo - Responsive */}
+
+        {/* ── Logo ── */}
         <div className="text-center mb-8 sm:mb-12">
-          <div className="inline-flex items-center rounded-2xl px-4 sm:px-8 py-3 sm:py-5">
-            <img
-              src={logo}
+          <div className="inline-flex items-center gap-2 rounded-2xl px-4 sm:px-8 py-3 sm:py-5">
+            {/* ✅ FIX: LogoImage avec skeleton + fallback */}
+            <LogoImage
+              src="/logo_gazbf.png"
               alt="FasoGaz Logo"
               className="h-12 sm:h-14 md:h-16 w-auto object-contain"
+              wrapperClass="h-12 sm:h-14 md:h-16"
+              skeletonClass="rounded-xl w-12 sm:w-14 md:w-16"
+              fallbackText="FG"
             />
-
-            <div className="flex items-center text-2xl sm:text-3xl font-extrabold tracking-wide">
-              <span className="text-red-600">F</span>
-              <span className="text-yellow-500">a</span>
-              <span className="text-yellow-500">s</span>
-              <span className="text-green-600">o</span>
-              <span className="text-red-600">G</span>
-              <span className="text-yellow-500">a</span>
-              <span className="text-green-600">z</span>
-            </div>
+            <FasoGazWordmark textSize="text-2xl sm:text-3xl" />
           </div>
         </div>
 
-        {/* Formulaire - Responsive */}
+        {/* ── Carte formulaire ── */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-5 sm:p-6 md:p-8">
+
           {alert && (
             <Alert
               type={alert.type}
@@ -281,7 +124,7 @@ const Login = () => {
             />
           )}
 
-          {/* MODE: CONNEXION NORMALE */}
+          {/* ════ MODE : CONNEXION ════ */}
           {mode === 'login' && (
             <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
               <div className="text-center mb-4 sm:mb-6">
@@ -311,34 +154,25 @@ const Login = () => {
                 required
               />
 
-              <Button
-                type="submit"
-                variant="primary"
-                fullWidth
-                loading={loading}
-              >
+              <Button type="submit" variant="primary" fullWidth loading={loading}>
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
                     Connexion...
                   </>
-                ) : (
-                  'Se connecter'
-                )}
+                ) : 'Se connecter'}
               </Button>
 
-              {/* Lien mot de passe oublié */}
               <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => setMode('forgot')}
+                  onClick={() => { setMode('forgot'); setAlert(null); }}
                   className="text-xs sm:text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors duration-200"
                 >
                   Mot de passe oublié ?
                 </button>
               </div>
 
-              {/* Séparateur */}
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
@@ -348,14 +182,10 @@ const Login = () => {
                 </div>
               </div>
 
-              {/* Lien inscription */}
               <div className="text-center">
                 <p className="text-xs sm:text-sm text-gray-600">
                   Pas encore de compte ?{' '}
-                  <Link
-                    to="/register"
-                    className="font-semibold text-primary-600 hover:text-primary-700 transition-colors duration-200"
-                  >
+                  <Link to="/register" className="font-semibold text-primary-600 hover:text-primary-700 transition-colors duration-200">
                     Créer un compte
                   </Link>
                 </p>
@@ -363,122 +193,64 @@ const Login = () => {
             </form>
           )}
 
-          {/* MODE: DEMANDE OTP */}
+          {/* ════ MODE : MOT DE PASSE OUBLIÉ ════ */}
           {mode === 'forgot' && (
-            <form onSubmit={handleForgotPassword} className="space-y-5 sm:space-y-6">
-              <div className="mb-4 sm:mb-6">
+            <div className="space-y-5 sm:space-y-6">
+              <div>
                 <button
                   type="button"
-                  onClick={() => setMode('login')}
-                  className="flex items-center text-gray-600 hover:text-gray-800 mb-3 sm:mb-4 text-sm"
+                  onClick={() => { setMode('login'); setAlert(null); }}
+                  className="flex items-center text-gray-600 hover:text-gray-800 mb-4 text-sm transition-colors"
                 >
-                  <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                  Retour
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Retour à la connexion
                 </button>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Mot de passe oublié</h2>
-                <p className="text-xs sm:text-sm text-gray-600 mt-2">
-                  Entrez votre numéro de téléphone. Nous vous enverrons un code OTP par SMS.
+              </div>
+
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800 leading-relaxed">
+                  Pour réinitialiser votre mot de passe, contactez notre équipe support
+                  via WhatsApp. Munissez-vous de votre <strong>numéro de téléphone
+                  enregistré</strong> sur FasoGaz pour que nous puissions vérifier
+                  votre identité.
                 </p>
               </div>
 
-              <Input
-                label="Numéro de téléphone"
-                name="phone"
-                type="tel"
-                value={resetData.phone}
-                onChange={handleResetChange}
-                placeholder="+226XXXXXXXX"
-                icon={Phone}
-                required
-                autoFocus
-              />
-
-              <Button
-                type="submit"
-                variant="primary"
-                fullWidth
-                loading={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
-                    Envoi en cours...
-                  </>
-                ) : (
-                  'Envoyer le code OTP'
-                )}
-              </Button>
-            </form>
-          )}
-
-          {/* MODE: RÉINITIALISATION AVEC OTP */}
-          {mode === 'reset' && (
-            <form onSubmit={handleResetPassword} className="space-y-5 sm:space-y-6">
-              <div className="mb-4 sm:mb-6">
-                <button
-                  type="button"
-                  onClick={() => setMode('forgot')}
-                  className="flex items-center text-gray-600 hover:text-gray-800 mb-3 sm:mb-4 text-sm"
-                >
-                  <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                  Retour
-                </button>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Réinitialiser le mot de passe</h2>
-                <p className="text-xs sm:text-sm text-gray-600 mt-2">
-                  Entrez le code OTP reçu par SMS et votre nouveau mot de passe.
-                </p>
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-700">Comment ça marche :</p>
+                <ol className="space-y-2 text-sm text-gray-600">
+                  {[
+                    'Cliquez sur le bouton ci-dessous pour ouvrir WhatsApp',
+                    'Indiquez votre numéro de téléphone enregistré',
+                    'Notre support vérifie votre identité et réinitialise votre mot de passe',
+                    'Vous recevez votre nouveau mot de passe temporaire via WhatsApp',
+                  ].map((step, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                      {step}
+                    </li>
+                  ))}
+                </ol>
               </div>
 
-              <Input
-                label="Code OTP (6 chiffres)"
-                name="otp"
-                type="text"
-                value={resetData.otp}
-                onChange={handleResetChange}
-                placeholder="123456"
-                maxLength={6}
-                required
-                autoFocus
-              />
-
-              <Input
-                label="Nouveau mot de passe"
-                name="newPassword"
-                type="password"
-                value={resetData.newPassword}
-                onChange={handleResetChange}
-                placeholder="••••••••"
-                icon={Lock}
-                required
-              />
-
-              <Input
-                label="Confirmer le mot de passe"
-                name="confirmPassword"
-                type="password"
-                value={resetData.confirmPassword}
-                onChange={handleResetChange}
-                placeholder="••••••••"
-                icon={Lock}
-                required
-              />
-
-              <Button
-                type="submit"
-                variant="primary"
-                fullWidth
-                loading={loading}
+              <a
+                href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${buildWhatsAppMessage()}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200 shadow-sm"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
-                    Réinitialisation...
-                  </>
-                ) : (
-                  'Réinitialiser le mot de passe'
-                )}
-              </Button>
-            </form>
+                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current flex-shrink-0" aria-hidden="true">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                </svg>
+                Contacter le support WhatsApp
+              </a>
+
+              <p className="text-xs text-center text-gray-500 flex items-center justify-center gap-1">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Support disponible 24h/24
+              </p>
+            </div>
           )}
         </div>
       </div>

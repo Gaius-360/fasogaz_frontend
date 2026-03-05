@@ -2,24 +2,18 @@
 // FICHIER: src/pages/RegisterRevendeur.jsx
 // ✅ REVENDEURS — Inscription via lien d'invitation, sans OTP
 // ✅ RESPONSIVE: Optimisé pour mobile (320px+), tablette et desktop
+// ✅ FIX: logo avec skeleton + fallback (LogoImage)
 // ==========================================
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  User,
-  Phone,
-  Lock,
-  Building2,
-  AlertCircle,
-  MapPin,
-  Shield
-} from 'lucide-react';
+import { User, Phone, Lock, Building2, AlertCircle, MapPin, Shield } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Alert from '../components/common/Alert';
 import useAuthStore from '../store/authStore';
 import { api } from '../api/apiSwitch';
+import LogoImage, { FasoGazWordmark } from '../components/common/LogoImage';
 
 const RegisterRevendeur = () => {
   const navigate = useNavigate();
@@ -28,7 +22,7 @@ const RegisterRevendeur = () => {
 
   const tokenFromUrl = searchParams.get('token');
 
-  const [step, setStep] = useState(1); // 1: Vérif token, 2: Inscription
+  const [step, setStep] = useState(1);
   const [tokenValid, setTokenValid] = useState(false);
   const [tokenInfo, setTokenInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,50 +40,33 @@ const RegisterRevendeur = () => {
     businessAddress: ''
   });
 
-  // ==========================================
-  // VÉRIFICATION DU TOKEN AU CHARGEMENT
-  // ==========================================
   useEffect(() => {
     const verifyToken = async () => {
       if (!tokenFromUrl) {
-        setAlert({
-          type: 'error',
-          message: 'Lien d\'invitation invalide. Vous devez recevoir un lien de la part d\'un agent ou administrateur.'
-        });
+        setAlert({ type: 'error', message: 'Lien d\'invitation invalide. Vous devez recevoir un lien de la part d\'un agent ou administrateur.' });
         setLoading(false);
         return;
       }
-
       try {
         const response = await api.invitations.verify(tokenFromUrl);
-
         if (response.success && response.data.isValid) {
           setTokenValid(true);
           setTokenInfo(response.data);
           setStep(2);
         } else {
-          setAlert({
-            type: 'error',
-            message: response.message || 'Ce lien d\'invitation n\'est pas valide'
-          });
+          setAlert({ type: 'error', message: response.message || 'Ce lien d\'invitation n\'est pas valide' });
         }
       } catch (error) {
-        console.error('❌ Erreur vérification token:', error);
-        setAlert({
-          type: 'error',
-          message: error.message || 'Impossible de vérifier le lien. Veuillez réessayer.'
-        });
+        setAlert({ type: 'error', message: error.message || 'Impossible de vérifier le lien. Veuillez réessayer.' });
       } finally {
         setLoading(false);
       }
     };
-
     verifyToken();
   }, [tokenFromUrl]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     if (name === 'phone') {
       if (!value.startsWith('+226')) {
         setFormData(prev => ({ ...prev, phone: '+226' }));
@@ -101,35 +78,18 @@ const RegisterRevendeur = () => {
     }
   };
 
-  // ==========================================
-  // SOUMISSION INSCRIPTION — Connexion directe sans OTP
-  // ==========================================
   const handleSubmitRegistration = async (e) => {
     e.preventDefault();
     setAlert(null);
 
-    if (!formData.phone || formData.phone.length < 12) {
-      setAlert({ type: 'error', message: 'Numéro de téléphone invalide' });
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      setAlert({ type: 'error', message: 'Le mot de passe doit contenir au moins 6 caractères' });
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setAlert({ type: 'error', message: 'Les mots de passe ne correspondent pas' });
-      return;
-    }
-
+    if (!formData.phone || formData.phone.length < 12) { setAlert({ type: 'error', message: 'Numéro de téléphone invalide' }); return; }
+    if (formData.password.length < 6) { setAlert({ type: 'error', message: 'Le mot de passe doit contenir au moins 6 caractères' }); return; }
+    if (formData.password !== formData.confirmPassword) { setAlert({ type: 'error', message: 'Les mots de passe ne correspondent pas' }); return; }
     if (!formData.firstName || !formData.lastName || !formData.businessName || !formData.city) {
-      setAlert({ type: 'error', message: 'Tous les champs obligatoires doivent être remplis' });
-      return;
+      setAlert({ type: 'error', message: 'Tous les champs obligatoires doivent être remplis' }); return;
     }
 
     setLoading(true);
-
     try {
       const response = await api.auth.register({
         token: tokenFromUrl,
@@ -146,28 +106,19 @@ const RegisterRevendeur = () => {
 
       if (response.success) {
         const { token, user } = response.data;
-
         localStorage.removeItem('agentToken');
         localStorage.removeItem('agentUser');
-
-        // ✅ Connexion directe — plus besoin d'OTP
         login(token, user);
         navigate('/seller/dashboard');
       }
     } catch (error) {
-      console.error('❌ Erreur inscription:', error);
-      setAlert({
-        type: 'error',
-        message: error.message || 'Erreur lors de l\'inscription'
-      });
+      setAlert({ type: 'error', message: error.message || 'Erreur lors de l\'inscription' });
     } finally {
       setLoading(false);
     }
   };
 
-  // ==========================================
-  // VÉRIFICATION TOKEN EN COURS
-  // ==========================================
+  // ── Vérification token en cours ──
   if (step === 1 && loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
@@ -179,9 +130,7 @@ const RegisterRevendeur = () => {
     );
   }
 
-  // ==========================================
-  // TOKEN INVALIDE
-  // ==========================================
+  // ── Token invalide ──
   if (step === 1 && !tokenValid) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-3 sm:p-4">
@@ -189,25 +138,12 @@ const RegisterRevendeur = () => {
           <div className="w-14 h-14 sm:w-16 sm:h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="h-7 w-7 sm:h-8 sm:w-8 text-red-600" />
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-            Lien invalide
-          </h2>
-          {alert && (
-            <Alert
-              type={alert.type}
-              message={alert.message}
-              onClose={() => setAlert(null)}
-              className="mb-6"
-            />
-          )}
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Lien invalide</h2>
+          {alert && <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-6" />}
           <p className="text-sm sm:text-base text-gray-600 mb-6 px-2">
             Ce lien d'invitation n'est pas valide ou a expiré. Pour devenir revendeur, veuillez contacter notre équipe.
           </p>
-          <Button
-            variant="primary"
-            fullWidth
-            onClick={() => navigate('/devenir-revendeur')}
-          >
+          <Button variant="primary" fullWidth onClick={() => navigate('/devenir-revendeur')}>
             En savoir plus
           </Button>
         </div>
@@ -215,37 +151,29 @@ const RegisterRevendeur = () => {
     );
   }
 
-  // ==========================================
-  // FORMULAIRE D'INSCRIPTION
-  // ==========================================
+  // ── Formulaire d'inscription ──
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center p-3 sm:p-4 md:p-6">
       <div className="max-w-md w-full">
 
-        {/* Logo - Responsive */}
+        {/* Logo - ✅ FIX: LogoImage avec skeleton + fallback */}
         <div className="text-center mb-6 sm:mb-8">
-          <div className="inline-flex items-center rounded-2xl px-4 sm:px-8 py-3 sm:py-5">
-            <img
+          <div className="inline-flex items-center gap-2 rounded-2xl px-4 sm:px-8 py-3 sm:py-5">
+            <LogoImage
               src="/logo_gazbf.png"
               alt="FasoGaz Logo"
               className="h-12 sm:h-14 md:h-16 w-auto object-contain"
+              wrapperClass="h-12 sm:h-14 md:h-16"
+              skeletonClass="rounded-xl w-12 sm:w-14 md:w-16"
+              fallbackText="FG"
             />
-            <div className="flex items-center text-2xl sm:text-3xl font-extrabold tracking-wide">
-              <span className="text-red-600">F</span>
-              <span className="text-yellow-500">a</span>
-              <span className="text-yellow-500">s</span>
-              <span className="text-green-600">o</span>
-              <span className="text-red-600">G</span>
-              <span className="text-yellow-500">a</span>
-              <span className="text-green-600">z</span>
-            </div>
+            <FasoGazWordmark textSize="text-2xl sm:text-3xl" />
           </div>
         </div>
 
-        {/* Formulaire - Responsive */}
+        {/* Formulaire */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-5 sm:p-6 md:p-8">
 
-          {/* Info invitation */}
           {tokenInfo && (
             <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-green-50 border border-green-200 rounded-lg">
               <div className="flex items-start gap-2 sm:gap-3">
@@ -257,14 +185,7 @@ const RegisterRevendeur = () => {
             </div>
           )}
 
-          {alert && (
-            <Alert
-              type={alert.type}
-              message={alert.message}
-              onClose={() => setAlert(null)}
-              className="mb-4 sm:mb-6"
-            />
-          )}
+          {alert && <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-4 sm:mb-6" />}
 
           <form onSubmit={handleSubmitRegistration} className="space-y-3 sm:space-y-4">
             <div className="text-center mb-4 sm:mb-6">
@@ -275,69 +196,22 @@ const RegisterRevendeur = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                label="Prénom"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                required
-              />
-              <Input
-                label="Nom"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                required
-              />
+              <Input label="Prénom" name="firstName" value={formData.firstName} onChange={handleChange} required />
+              <Input label="Nom" name="lastName" value={formData.lastName} onChange={handleChange} required />
             </div>
 
-            <Input
-              label="Téléphone"
-              name="phone"
-              type="tel"
-              value={formData.phone}
-              onChange={handleChange}
-              placeholder="+226XXXXXXXX"
-              icon={Phone}
-              required
-            />
+            <Input label="Téléphone" name="phone" type="tel" value={formData.phone} onChange={handleChange} placeholder="+226XXXXXXXX" icon={Phone} required />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                label="Mot de passe"
-                name="password"
-                type="password"
-                value={formData.password}
-                onChange={handleChange}
-                icon={Lock}
-                required
-              />
-              <Input
-                label="Confirmer"
-                name="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                icon={Lock}
-                required
-              />
+              <Input label="Mot de passe" name="password" type="password" value={formData.password} onChange={handleChange} icon={Lock} required />
+              <Input label="Confirmer" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} icon={Lock} required />
             </div>
 
-            <Input
-              label="Nom du dépôt"
-              name="businessName"
-              value={formData.businessName}
-              onChange={handleChange}
-              icon={Building2}
-              placeholder="Ex: Dépôt Wend Konta"
-              required
-            />
+            <Input label="Nom du dépôt" name="businessName" value={formData.businessName} onChange={handleChange} icon={Building2} placeholder="Ex: Dépôt Wend Konta" required />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ville *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ville *</label>
                 <select
                   name="city"
                   value={formData.city}
@@ -352,12 +226,7 @@ const RegisterRevendeur = () => {
               </div>
             </div>
 
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              loading={loading}
-            >
+            <Button type="submit" variant="primary" fullWidth loading={loading}>
               {loading ? 'Inscription...' : 'Créer mon compte'}
             </Button>
           </form>

@@ -1,6 +1,7 @@
 // ==========================================
 // FICHIER: src/pages/admin/AdminSellerDetail.jsx
 // VERSION RESPONSIVE
+// ✅ AJOUT: Bouton + modale "Réinitialiser mot de passe"
 // ==========================================
 
 import React, { useState, useEffect } from 'react';
@@ -23,22 +24,23 @@ import {
   Eye,
   MessageSquare,
   DollarSign,
-  Clock
+  Clock,
+  Lock,
+  X
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Alert from '../../components/common/Alert';
+import Input from '../../components/common/Input';
 import { formatPrice, formatDateTime } from '../../utils/helpers';
 import useAdmin from '../../hooks/useAdmin';
 
 // ── Helpers d'affichage ──────────────────────────────────────────────────────
 
-/** Formate un taux (0-100) en "X%" ou "N/A" si indéfini / NaN */
 const formatRate = (value) => {
   if (value === undefined || value === null || isNaN(Number(value))) return 'N/A';
   return `${Number(value).toFixed(0)}%`;
 };
 
-/** Formate une note (0-5) en "X.X" ou "N/A" si indéfini / NaN */
 const formatRating = (value) => {
   if (value === undefined || value === null || isNaN(Number(value)) || Number(value) === 0) return 'N/A';
   return Number(value).toFixed(1);
@@ -57,12 +59,18 @@ const AdminSellerDetail = () => {
     getSellerById,
     suspendSeller,
     reactivateSeller,
-    deleteSeller
+    deleteSeller,
+    resetUserPassword  // ✅ nouveau hook exposé
   } = useAdmin();
 
   const [seller, setSeller]       = useState(null);
   const [alert, setAlert]         = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // ── État modale reset MDP ──
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [newPassword, setNewPassword]       = useState('');
+  const [resetLoading, setResetLoading]     = useState(false);
 
   useEffect(() => { loadSellerDetail(); }, [id]);
 
@@ -101,8 +109,41 @@ const AdminSellerDetail = () => {
     if (confirmation !== 'SUPPRIMER') return;
     try {
       const response = await deleteSeller(seller.id);
-      if (response?.success) { setAlert({ type: 'success', message: 'Revendeur supprimé' }); setTimeout(() => navigate('/admin/sellers'), 2000); }
+      if (response?.success) {
+        setAlert({ type: 'success', message: 'Revendeur supprimé' });
+        setTimeout(() => navigate('/admin/sellers'), 2000);
+      }
     } catch (err) { setAlert({ type: 'error', message: err.message || 'Erreur lors de la suppression' }); }
+  };
+
+  // ── Réinitialisation mot de passe ──
+  const handleResetPassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setAlert({ type: 'error', message: 'Le mot de passe doit contenir au moins 6 caractères' });
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const response = await resetUserPassword(seller.id, newPassword);
+      if (response?.success) {
+        setAlert({
+          type: 'success',
+          message: `Mot de passe réinitialisé. Communiquez le nouveau mot de passe à ${seller.firstName} via WhatsApp.`
+        });
+        setShowResetModal(false);
+        setNewPassword('');
+      }
+    } catch (err) {
+      setAlert({ type: 'error', message: err.message || 'Erreur lors de la réinitialisation' });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const closeResetModal = () => {
+    setShowResetModal(false);
+    setNewPassword('');
   };
 
   const isSuspended = seller?.validationStatus === 'suspended';
@@ -195,7 +236,17 @@ const AdminSellerDetail = () => {
         </div>
 
         {/* Côté droit : boutons */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+          {/* ✅ NOUVEAU: Bouton reset MDP */}
+          <Button
+            variant="outline"
+            onClick={() => setShowResetModal(true)}
+            disabled={loading}
+            className="text-sm sm:text-base"
+          >
+            <Lock className="h-4 w-4 mr-1.5" /> Réinitialiser MDP
+          </Button>
+
           {!isSuspended ? (
             <Button variant="outline" onClick={handleSuspend} disabled={loading} className="text-sm sm:text-base">
               <Ban className="h-4 w-4 mr-1.5" /> Suspendre
@@ -241,9 +292,8 @@ const AdminSellerDetail = () => {
           )}
         </div>
 
-        {/* Info propriétaire + Localisation : 1 col mobile, 2 col md+ */}
+        {/* Info propriétaire + Localisation */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {/* Propriétaire */}
           <div>
             <h3 className="font-semibold text-gray-900 mb-3">Informations du propriétaire</h3>
             <div className="text-sm space-y-2">
@@ -261,13 +311,11 @@ const AdminSellerDetail = () => {
             </div>
           </div>
 
-          {/* Localisation */}
           <div>
             <h3 className="font-semibold text-gray-900 mb-3">Localisation</h3>
             <div className="text-sm space-y-2">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                {/* ✅ Affiche quartier + ville, ou juste la ville si pas de quartier */}
                 <span>
                   {seller.quarter ? `${seller.quarter}, ` : ''}{seller.city || 'Non précisée'}
                 </span>
@@ -288,7 +336,7 @@ const AdminSellerDetail = () => {
           <span>Inscrit le {formatDateTime(seller.createdAt)}</span>
         </div>
 
-        {/* ── Stats principales : 2 cols mobile, 4 cols desktop ── */}
+        {/* Stats principales */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-5 mt-5 border-t">
           {[
             {
@@ -334,7 +382,6 @@ const AdminSellerDetail = () => {
 
       {/* ══════ TABS ══════ */}
       <div className="bg-white rounded-lg border overflow-hidden">
-        {/* Tab bar : scroll horizontal sur petit écran */}
         <div className="border-b overflow-x-auto">
           <div className="flex min-w-max sm:min-w-0">
             {tabs.map(tab => (
@@ -353,14 +400,13 @@ const AdminSellerDetail = () => {
           </div>
         </div>
 
-        {/* ── Contenu tabs ── */}
         <div className="p-4 sm:p-6">
 
           {/* ════ TAB : Vue d'ensemble ════ */}
           {activeTab === 'overview' && (
             <div className="space-y-5 sm:space-y-6">
 
-              {/* Performance : 1 col mobile, 3 col sm+ */}
+              {/* Performance */}
               <div>
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary-600" /> Statistiques de performance
@@ -371,7 +417,6 @@ const AdminSellerDetail = () => {
                       bg: 'from-green-50 to-green-100',   border: 'border-green-200',
                       labelColor: 'text-green-700',  valueColor: 'text-green-600',  subColor: 'text-green-600',
                       label: 'Taux de complétion',
-                      // ✅ formatRate protège contre undefined / null / NaN
                       value: formatRate(stats.performance.orderCompletionRate),
                       sub: `${stats.orders.completed} / ${stats.orders.total} commandes`
                     },
@@ -379,7 +424,6 @@ const AdminSellerDetail = () => {
                       bg: 'from-blue-50 to-blue-100',     border: 'border-blue-200',
                       labelColor: 'text-blue-700',   valueColor: 'text-blue-600',   subColor: 'text-blue-600',
                       label: "Taux d'acceptation",
-                      // ✅ formatRate protège contre undefined / null / NaN
                       value: formatRate(stats.performance.orderAcceptanceRate),
                       sub: 'Commandes acceptées vs rejetées'
                     },
@@ -387,7 +431,6 @@ const AdminSellerDetail = () => {
                       bg: 'from-yellow-50 to-yellow-100', border: 'border-yellow-200',
                       labelColor: 'text-yellow-700', valueColor: 'text-yellow-600', subColor: 'text-yellow-600',
                       label: 'Note moyenne',
-                      // ✅ formatRating protège contre undefined / null / 0
                       value: formatRating(stats.performance.averageRating),
                       sub: `Basée sur ${stats.reviews.total} avis`
                     },
@@ -401,7 +444,7 @@ const AdminSellerDetail = () => {
                 </div>
               </div>
 
-              {/* Revenus détaillés : 1 col mobile, 3 col sm+ */}
+              {/* Revenus détaillés */}
               <div>
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-purple-600" /> Chiffre d'affaires détaillé
@@ -420,7 +463,7 @@ const AdminSellerDetail = () => {
                 </div>
               </div>
 
-              {/* Inventaire : 2 cols mobile, 4 cols md+ */}
+              {/* Inventaire */}
               <div>
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <Package className="h-5 w-5 text-blue-600" /> Inventaire détaillé
@@ -459,9 +502,10 @@ const AdminSellerDetail = () => {
                 <div className="space-y-3">
                   {seller.products.map((product) => (
                     <div key={product.id} className="flex items-start justify-between p-3 sm:p-4 border rounded-lg hover:bg-gray-50 transition-colors gap-3">
-                      {/* Infos produit */}
                       <div className="min-w-0">
-                        <h4 className="font-semibold text-gray-900 truncate">{product.brand} – {product.bottleType}</h4>
+                        <h4 className="font-semibold text-gray-900 truncate">
+                          {product.brand} – {product.bottleType}
+                        </h4>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-sm text-gray-600">
                           <span className="flex items-center gap-1">
                             <Package className="h-3.5 w-3.5" /> Stock : {product.quantity ?? 0}
@@ -474,8 +518,6 @@ const AdminSellerDetail = () => {
                           </span>
                         </div>
                       </div>
-
-                      {/* Prix + badge */}
                       <div className="text-right flex-shrink-0">
                         <p className="text-base sm:text-lg font-bold text-primary-600">{formatPrice(product.price)}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -483,7 +525,8 @@ const AdminSellerDetail = () => {
                           product.status === 'limited'   ? 'bg-yellow-100 text-yellow-800' :
                                                            'bg-red-100 text-red-800'
                         }`}>
-                          {product.status === 'available' ? 'Disponible' : product.status === 'limited' ? 'Limité' : 'Rupture'}
+                          {product.status === 'available' ? 'Disponible' :
+                           product.status === 'limited'   ? 'Limité' : 'Rupture'}
                         </span>
                       </div>
                     </div>
@@ -505,7 +548,6 @@ const AdminSellerDetail = () => {
                 <div className="space-y-3">
                   {seller.recentOrders.map((order) => (
                     <div key={order.id} className="p-3 sm:p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                      {/* Ligne 1 : numéro + montant + statut */}
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0">
                           <p className="font-semibold text-gray-900">#{order.orderNumber}</p>
@@ -525,11 +567,11 @@ const AdminSellerDetail = () => {
                           </span>
                         </div>
                       </div>
-
-                      {/* Ligne 2 : détails (wrap sur mobile) */}
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-600">
                         <span className="flex items-center gap-1">
-                          {order.deliveryMode === 'delivery' ? <Truck className="h-3.5 w-3.5" /> : <Store className="h-3.5 w-3.5" />}
+                          {order.deliveryMode === 'delivery'
+                            ? <Truck className="h-3.5 w-3.5" />
+                            : <Store className="h-3.5 w-3.5" />}
                           {order.deliveryMode === 'delivery' ? 'Livraison' : 'Retrait'}
                         </span>
                         <span className="flex items-center gap-1">
@@ -569,12 +611,17 @@ const AdminSellerDetail = () => {
                     <div className="space-y-2">
                       {[5, 4, 3, 2, 1].map(rating => {
                         const count      = stats.reviews.distribution?.[rating] || 0;
-                        const percentage = stats.reviews.total > 0 ? (count / stats.reviews.total * 100).toFixed(0) : 0;
+                        const percentage = stats.reviews.total > 0
+                          ? (count / stats.reviews.total * 100).toFixed(0)
+                          : 0;
                         return (
                           <div key={rating} className="flex items-center gap-2 sm:gap-3">
                             <span className="text-sm font-medium text-gray-700 w-7 text-right">{rating}★</span>
                             <div className="flex-1 bg-gray-200 rounded-full h-2">
-                              <div className="bg-yellow-500 h-2 rounded-full transition-all" style={{ width: `${percentage}%` }} />
+                              <div
+                                className="bg-yellow-500 h-2 rounded-full transition-all"
+                                style={{ width: `${percentage}%` }}
+                              />
                             </div>
                             <span className="text-sm text-gray-600 w-8 text-right">{count}</span>
                           </div>
@@ -586,16 +633,16 @@ const AdminSellerDetail = () => {
                   {/* Liste des avis */}
                   {seller.recentReviews.map((review) => (
                     <div key={review.id} className="p-3 sm:p-4 border rounded-lg">
-                      {/* Auteur + date */}
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div>
                           <p className="font-semibold text-gray-900">
                             {review.customer?.firstName} {review.customer?.lastName}
                           </p>
-                          {/* Étoiles */}
                           <div className="flex items-center gap-0.5 mt-1">
                             {Array.from({ length: 5 }).map((_, i) => (
-                              <Star key={i} className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+                              <Star key={i} className={`h-4 w-4 ${
+                                i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+                              }`} />
                             ))}
                           </div>
                         </div>
@@ -604,14 +651,12 @@ const AdminSellerDetail = () => {
                         </span>
                       </div>
 
-                      {/* Commentaire */}
                       {review.comment && (
                         <p className="text-sm text-gray-700 mt-2 bg-gray-50 p-3 rounded break-words">
                           "{review.comment}"
                         </p>
                       )}
 
-                      {/* Réponse donnée */}
                       {review.hasResponse && (
                         <div className="mt-2 pl-3 border-l-2 border-primary-200">
                           <p className="text-xs text-primary-600 font-medium">✓ Réponse donnée</p>
@@ -636,6 +681,82 @@ const AdminSellerDetail = () => {
           )}
         </div>
       </div>
+
+      {/* ════ MODALE RESET MOT DE PASSE ════ */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+
+            {/* En-tête modale */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Lock className="h-5 w-5 text-orange-600" />
+                </div>
+                <h3 className="font-bold text-gray-900">Réinitialiser le mot de passe</h3>
+              </div>
+              <button
+                onClick={closeResetModal}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Info revendeur */}
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Revendeur : <strong className="text-gray-900">{seller.businessName}</strong>
+              </p>
+              <p className="text-sm text-gray-600">
+                Contact : <strong className="text-gray-900">
+                  {seller.firstName} {seller.lastName} — {seller.phone}
+                </strong>
+              </p>
+            </div>
+
+            {/* Avertissement flux WhatsApp */}
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-800 leading-relaxed">
+                ⚠️ Assurez-vous d'avoir vérifié l'identité du revendeur via WhatsApp avant
+                de réinitialiser son mot de passe. Communiquez-lui ensuite le nouveau
+                mot de passe temporaire via la même conversation.
+              </p>
+            </div>
+
+            {/* Champ nouveau MDP */}
+            <Input
+              label="Nouveau mot de passe temporaire"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              icon={Lock}
+              placeholder="Minimum 6 caractères"
+            />
+
+            {/* Boutons */}
+            <div className="flex gap-3 mt-5">
+              <Button
+                variant="outline"
+                fullWidth
+                onClick={closeResetModal}
+                disabled={resetLoading}
+              >
+                Annuler
+              </Button>
+              <Button
+                variant="primary"
+                fullWidth
+                loading={resetLoading}
+                onClick={handleResetPassword}
+              >
+                Confirmer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
