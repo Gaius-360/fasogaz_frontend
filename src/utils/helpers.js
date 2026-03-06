@@ -1,6 +1,7 @@
 // ==========================================
 // FICHIER: src/utils/helpers.js
 // ✅ FIX: Importer userApi
+// ✅ getCurrentPosition — stratégie multi-mesures haute précision
 // ==========================================
 
 import { correctQuarterName, cleanAndValidateQuarterName } from '../data/quarterNameCorrections.js';
@@ -121,12 +122,12 @@ export const reverseGeocode = async (latitude, longitude) => {
 
     // ✅ Extraire et corriger le quartier
     const rawQuarter = 
-      address.suburb ||
+      address.suburb       ||
       address.neighbourhood ||
-      address.hamlet ||
-      address.quarter ||
+      address.hamlet       ||
+      address.quarter      ||
       address.city_district ||
-      address.residential ||
+      address.residential  ||
       null;
 
     const quarter = rawQuarter ? cleanAndValidateQuarterName(rawQuarter) : null;
@@ -137,9 +138,9 @@ export const reverseGeocode = async (latitude, longitude) => {
 
     // Extraire la ville
     const city = 
-      address.city || 
-      address.town || 
-      address.village || 
+      address.city         || 
+      address.town         || 
+      address.village      || 
       address.municipality ||
       'Ouagadougou';
 
@@ -183,87 +184,156 @@ export const reverseGeocode = async (latitude, longitude) => {
 
 /**
  * ✅ OBTENIR LA POSITION GÉOGRAPHIQUE ACTUELLE
+ * Stratégie multi-mesures : on collecte jusqu'à 5 positions et on retient
+ * la plus précise. Arrêt anticipé si accuracy ≤ 30 m.
+ * Rejet si la meilleure mesure dépasse 150 m après 20 secondes.
  */
-export const getCurrentPosition = async () => {
+export const getCurrentPosition = () => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error('La géolocalisation n\'est pas supportée par votre navigateur'));
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-        
-        console.log('📍 Position GPS obtenue:', { latitude, longitude });
+    // ── Paramètres ─────────────────────────────────────────────
+    const TARGET_ACCURACY         = 30;    // mètres : arrêt anticipé si atteint
+    const MAX_ACCEPTABLE_ACCURACY = 150;   // mètres : refus si toujours au-dessus
+    const MAX_SAMPLES             = 5;     // nombre max de mesures à collecter
+    const TIMEOUT_MS              = 20000; // durée totale maximale (ms)
+    // ───────────────────────────────────────────────────────────
 
-        try {
-          // ✅ Utiliser le backend pour le géocodage
-          const locationData = await reverseGeocode(latitude, longitude);
-          
-          if (locationData.success) {
-            resolve({
-              latitude,
-              longitude,
-              accuracy: position.coords.accuracy,
-              quarter: locationData.quarter,
-              city: locationData.city,
-              fullAddress: locationData.fullAddress,
-              details: locationData.details,
-              source: 'backend',
-              warning: locationData.warning || null
-            });
-          } else {
-            console.error('❌ Échec géocodage backend');
-            resolve({
-              latitude,
-              longitude,
-              accuracy: position.coords.accuracy,
-              quarter: null,
-              city: null,
-              geocodingError: locationData.error || 'Erreur de géocodage',
-              source: 'error'
-            });
-          }
+    let bestPosition = null;
+    let sampleCount  = 0;
+    let watchId      = null;
+    let timer        = null;
 
-        } catch (geocodeError) {
-          console.error('❌ Erreur géocodage:', geocodeError);
-          
+    /** Arrête la surveillance et annule le timer */
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (timer   !== null) clearTimeout(timer);
+    };
+
+    /** Appelé quand on a la meilleure position possible */
+    const finish = async (pos) => {
+      cleanup();
+
+      const latitude  = pos.coords.latitude;
+      const longitude = pos.coords.longitude;
+      const accuracy  = pos.coords.accuracy;
+
+      console.log(`📍 Meilleure position retenue — précision : ±${Math.round(accuracy)} m`);
+
+      try {
+        const locationData = await reverseGeocode(latitude, longitude);
+
+        if (locationData.success) {
           resolve({
             latitude,
             longitude,
-            accuracy: position.coords.accuracy,
-            quarter: null,
-            city: null,
-            geocodingError: geocodeError.message,
-            source: 'error'
+            accuracy,
+            quarter:     locationData.quarter,
+            city:        locationData.city,
+            fullAddress: locationData.fullAddress,
+            details:     locationData.details,
+            source:      'backend',
+            warning:     locationData.warning || null
+          });
+        } else {
+          // Géocodage échoué mais position valide → on retourne quand même les coords
+          resolve({
+            latitude,
+            longitude,
+            accuracy,
+            quarter:        null,
+            city:           null,
+            geocodingError: locationData.error || 'Erreur de géocodage',
+            source:         'error'
           });
         }
-      },
-      (error) => {
-        let message = 'Impossible d\'obtenir votre position';
-        
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            message = 'Vous avez refusé l\'accès à votre position. Veuillez activer la géolocalisation dans les paramètres de votre navigateur.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            message = 'Position non disponible';
-            break;
-          case error.TIMEOUT:
-            message = 'La demande a expiré. Veuillez réessayer.';
-            break;
-        }
-        
-        reject(new Error(message));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+      } catch (geocodeError) {
+        console.error('❌ Erreur géocodage:', geocodeError);
+        resolve({
+          latitude,
+          longitude,
+          accuracy,
+          quarter:        null,
+          city:           null,
+          geocodingError: geocodeError.message,
+          source:         'error'
+        });
       }
-    );
+    };
+
+    /** Reçoit chaque nouvelle mesure GPS */
+    const onSuccess = (pos) => {
+      sampleCount++;
+      const accuracy = pos.coords.accuracy;
+
+      console.log(`📡 Mesure GPS #${sampleCount} — précision : ±${Math.round(accuracy)} m`);
+
+      // Garder uniquement la mesure la plus précise (accuracy la plus basse)
+      if (!bestPosition || accuracy < bestPosition.coords.accuracy) {
+        bestPosition = pos;
+      }
+
+      // Arrêt anticipé : précision cible atteinte OU quota de mesures épuisé
+      if (accuracy <= TARGET_ACCURACY || sampleCount >= MAX_SAMPLES) {
+        finish(bestPosition);
+      }
+    };
+
+    const onError = (error) => {
+      // Si on a déjà une mesure acceptable malgré l'erreur, on l'utilise
+      if (bestPosition) {
+        finish(bestPosition);
+        return;
+      }
+
+      cleanup();
+
+      let message;
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          message = 'Vous avez refusé l\'accès à votre position. Veuillez activer la géolocalisation dans les paramètres de votre navigateur.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          message = 'Position non disponible. Vérifiez que le GPS est activé sur votre appareil.';
+          break;
+        case error.TIMEOUT:
+          message = 'La demande a expiré. Veuillez réessayer.';
+          break;
+        default:
+          message = 'Impossible d\'obtenir votre position.';
+      }
+
+      reject(new Error(message));
+    };
+
+    // Timer global : on prend la meilleure mesure acquise, ou on rejette
+    timer = setTimeout(() => {
+      if (bestPosition) {
+        if (bestPosition.coords.accuracy > MAX_ACCEPTABLE_ACCURACY) {
+          cleanup();
+          reject(new Error(
+            `Précision GPS insuffisante (±${Math.round(bestPosition.coords.accuracy)} m). ` +
+            'Placez-vous dans un endroit dégagé et réessayez.'
+          ));
+        } else {
+          finish(bestPosition);
+        }
+      } else {
+        cleanup();
+        reject(new Error('Délai dépassé. Assurez-vous que le GPS est activé et réessayez.'));
+      }
+    }, TIMEOUT_MS);
+
+    // ✅ watchPosition au lieu de getCurrentPosition :
+    //    collecte plusieurs mesures successives au lieu d'une seule
+    watchId = navigator.geolocation.watchPosition(onSuccess, onError, {
+      enableHighAccuracy: true,  // Force le GPS matériel (pas WiFi/IP)
+      timeout:            TIMEOUT_MS,
+      maximumAge:         0      // Jamais de position en cache
+    });
   });
 };
 
