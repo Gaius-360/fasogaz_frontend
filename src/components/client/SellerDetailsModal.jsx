@@ -157,18 +157,19 @@ const SellerDetailsModal = ({
       {/* Overlay — inset-0 + flex centré */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
         {/*
-          CHANGEMENTS CLÉS :
-          - Sur mobile (< sm) : sheet qui monte du bas (items-end), arrondi uniquement en haut
-          - Sur desktop (sm+) : centré avec padding, arrondi partout
-          - max-h calculé pour laisser la place à la safe area du bas (pb-safe)
-          - Le conteneur est "relative" pour le bouton X absolu
-          - flex flex-col + overflow-hidden sur le conteneur
-          - La zone scrollable (flex-1 overflow-y-auto) est distincte du footer fixe
+          FIX MOBILE :
+          - Retiré overflow-hidden du conteneur principal (il coupait le footer)
+          - Ajout overflow-hidden uniquement sur la zone scrollable via le wrapper
+          - Le conteneur flex-col laisse maintenant le footer toujours visible
+          - max-h réduit légèrement pour laisser de la marge sur les petits écrans
         */}
-        <div className="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[92dvh] sm:max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
+        <div
+          className="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl animate-scale-in mb-[60px] sm:mb-0"
+          style={{ maxHeight: 'calc(88dvh - 60px)', display: 'grid', gridTemplateRows: 'auto 1fr auto' }}
+        >
           
           {/* Header avec gradient */}
-          <div className="gradient-gazbf p-5 sm:p-6 flex-shrink-0">
+          <div className="gradient-gazbf p-5 sm:p-6 rounded-t-2xl">
             {/* Bouton fermer — positionné via relative sur le header */}
             <button
               onClick={onClose}
@@ -220,8 +221,8 @@ const SellerDetailsModal = ({
             </div>
           </div>
 
-          {/* Zone scrollable — flex-1 garantit qu'elle prend l'espace dispo sans déborder */}
-          <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          {/* Zone scrollable — min-h-0 essentiel pour que le grid row 1fr scroll correctement */}
+          <div className="overflow-y-auto overflow-x-hidden overscroll-contain p-4 sm:p-6" style={{ minHeight: 0 }}>
             
             {/* Message si le dépôt est fermé */}
             {isOpen === false && hasAccess && (
@@ -477,11 +478,16 @@ const SellerDetailsModal = ({
                 })}
               </div>
             )}
+
+            {/* Spacer pour que le dernier produit ne soit pas caché sous le footer fixe */}
+            <div className="h-2" />
           </div>
 
-          {/* Footer — flex-shrink-0 pour ne jamais être écrasé, pb-safe pour les iPhones */}
+          {/* Footer — grid row 'auto' le garde toujours visible sous la zone scroll */}
           {selectedProducts.length > 0 && hasAccess ? (
-            <div className="flex-shrink-0 p-4 sm:p-6 border-t-2 border-neutral-100 bg-neutral-50 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="p-4 sm:p-6 border-t-2 border-neutral-100 bg-neutral-50"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+            >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-neutral-700 font-bold">Total</span>
                 <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent">
@@ -506,7 +512,9 @@ const SellerDetailsModal = ({
               </Button>
             </div>
           ) : (
-            <div className="flex-shrink-0 p-4 sm:p-6 border-t-2 border-neutral-100 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="flex-shrink-0 p-4 sm:p-6 border-t-2 border-neutral-100"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+            >
               <Button variant="outline" fullWidth onClick={onClose}>
                 Fermer
               </Button>

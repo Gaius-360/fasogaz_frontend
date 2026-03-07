@@ -2,6 +2,8 @@
 // FICHIER: src/pages/client/MapPage.jsx - VERSION MOBILE OPTIMISÉE
 // ✅ Fix: Ne pas écraser les données d'accès
 // ✅ Mobile-first design professionnel
+// ✅ Fix GPS tracking: position live prioritaire sur l'adresse enregistrée
+// ✅ UX: Libellés bouton clairs + toast onboarding au premier appui GPS
 // ==========================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -46,6 +48,17 @@ const MapPage = () => {
   const [trackingMode, setTrackingMode] = useState(false);
   const [lastSearchPosition, setLastSearchPosition] = useState(null);
   const [showAutoStopNotification, setShowAutoStopNotification] = useState(false);
+  // ✅ Toast onboarding GPS — affiché une seule fois au premier appui
+  const [showGpsOnboarding, setShowGpsOnboarding] = useState(false);
+  const GPS_ONBOARDING_KEY = 'fasogaz_gps_onboarding_seen';
+
+  // ✅ FIX: Ref pour lire la valeur live de trackingMode sans problème de closure stale
+  const trackingModeRef = useRef(false);
+
+  // ✅ FIX: Synchroniser la ref avec l'état à chaque changement
+  useEffect(() => {
+    trackingModeRef.current = trackingMode;
+  }, [trackingMode]);
   
   const [accessStatus, setAccessStatus] = useState({
     hasAccess: false,
@@ -72,6 +85,7 @@ const MapPage = () => {
   useEffect(() => {
     setOnAutoStop((reason) => {
       setTrackingMode(false);
+      trackingModeRef.current = false;
       setShowAutoStopNotification(true);
       if (addresses.length > 0) {
         const defaultAddress = addresses.find(a => a.isDefault) || addresses[0];
@@ -167,16 +181,23 @@ const MapPage = () => {
     }
   }, [user?.city, user?.id]);
 
+  // ✅ FIX: Utiliser trackingModeRef (toujours à jour) au lieu de trackingMode (closure stale)
+  // Cela évite que loadAddresses écrase userLocation avec l'adresse enregistrée
+  // alors que le mode GPS live est actif.
   const loadAddresses = useCallback(async () => {
     try {
       const response = await api.addresses.getMyAddresses();
       if (response?.success) {
         const addressList = response.data || [];
         setAddresses(addressList);
-        if (addressList.length > 0 && !trackingMode) {
+        // ✅ trackingModeRef.current est toujours la valeur live, pas une valeur capturée
+        if (addressList.length > 0 && !trackingModeRef.current) {
           const defaultAddress = addressList.find(a => a.isDefault) || addressList[0];
           if (defaultAddress.latitude && defaultAddress.longitude) {
-            setUserLocation({ latitude: parseFloat(defaultAddress.latitude), longitude: parseFloat(defaultAddress.longitude) });
+            setUserLocation({
+              latitude: parseFloat(defaultAddress.latitude),
+              longitude: parseFloat(defaultAddress.longitude)
+            });
           }
         }
       }
@@ -185,7 +206,7 @@ const MapPage = () => {
     } finally {
       setLoadingAddresses(false);
     }
-  }, [trackingMode]);
+  }, []); // ✅ Plus de dépendance sur trackingMode — on utilise la ref
 
   const loadProducts = useCallback(async (location) => {
     setLoading(true);
@@ -212,20 +233,35 @@ const MapPage = () => {
 
   const handleToggleTracking = useCallback(async () => {
     if (trackingMode) {
+      // ── Désactivation du tracking ──────────────────────────────────────────
       disableTracking();
       setTrackingMode(false);
+      trackingModeRef.current = false;
+
+      // Revenir à l'adresse enregistrée comme référence
       if (addresses.length > 0) {
         const defaultAddress = addresses.find(a => a.isDefault) || addresses[0];
         if (defaultAddress.latitude && defaultAddress.longitude) {
-          const location = { latitude: parseFloat(defaultAddress.latitude), longitude: parseFloat(defaultAddress.longitude) };
+          const location = {
+            latitude: parseFloat(defaultAddress.latitude),
+            longitude: parseFloat(defaultAddress.longitude)
+          };
           setUserLocation(location);
-          searchProducts({ ...filters, latitude: location.latitude, longitude: location.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
+          searchProducts({
+            ...filters,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            city: user?.city || '',
+            radius: MAX_DISTANCE_KM
+          }, true);
         }
       }
       setAlert({ type: 'info', message: '📍 Mode position fixe activé' });
     } else {
+      // ── Activation du tracking ─────────────────────────────────────────────
       try {
         setAlert({ type: 'info', message: '📡 Obtention de votre position GPS...' });
+
         const currentPos = await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy }),
@@ -233,20 +269,60 @@ const MapPage = () => {
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         });
+
+        // ✅ Utiliser la position GPS live comme référence immédiatement
         setUserLocation(currentPos);
         setLastSearchPosition(currentPos);
-        await searchProducts({ ...filters, latitude: currentPos.latitude, longitude: currentPos.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
+
+        // ✅ Rechercher les revendeurs autour de la position GPS live (pas l'adresse)
+        await searchProducts({
+          ...filters,
+          latitude: currentPos.latitude,
+          longitude: currentPos.longitude,
+          city: user?.city || '',
+          radius: MAX_DISTANCE_KM
+        }, true);
+
+        // ✅ Activer le suivi continu — chaque mise à jour utilise newPosition (GPS live)
         enableTracking((newPosition) => {
           if (lastSearchPosition) {
-            const distance = calculateDistance(lastSearchPosition.latitude, lastSearchPosition.longitude, newPosition.latitude, newPosition.longitude);
+            const distance = calculateDistance(
+              lastSearchPosition.latitude,
+              lastSearchPosition.longitude,
+              newPosition.latitude,
+              newPosition.longitude
+            );
             if (distance < MIN_MOVEMENT_FOR_REFRESH) return;
           }
+
           setLastSearchPosition(newPosition);
+          // ✅ userLocation = position GPS live, pas l'adresse enregistrée
           setUserLocation(newPosition);
-          searchProducts({ ...filters, latitude: newPosition.latitude, longitude: newPosition.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
+
+          // ✅ Recherche autour de la position GPS live
+          searchProducts({
+            ...filters,
+            latitude: newPosition.latitude,
+            longitude: newPosition.longitude,
+            city: user?.city || '',
+            radius: MAX_DISTANCE_KM
+          }, true);
         });
+
         setTrackingMode(true);
+        trackingModeRef.current = true;
+
+        // ✅ Afficher le toast onboarding une seule fois au premier appui
+        const alreadySeen = localStorage.getItem(GPS_ONBOARDING_KEY);
+        if (!alreadySeen) {
+          setShowGpsOnboarding(true);
+          localStorage.setItem(GPS_ONBOARDING_KEY, 'true');
+          // Masquer automatiquement après 5 secondes
+          setTimeout(() => setShowGpsOnboarding(false), 5000);
+        }
+
         setAlert({ type: 'success', message: '🎯 Suivi GPS activé' });
+
       } catch (gpsError) {
         let errorMessage = '❌ Impossible d\'obtenir votre position GPS';
         if (gpsError.code === 1) errorMessage = '❌ Permission GPS refusée';
@@ -323,8 +399,25 @@ const MapPage = () => {
     return `${accessStatus.remainingHours}h ${accessStatus.remainingMinutes}min`;
   };
 
+  // ✅ FIX: En mode tracking, livePosition met à jour userLocation ET relance la recherche
+  // C'est ici que la magie opère : à chaque nouvelle position GPS reçue du contexte,
+  // on recherche les revendeurs autour du client (et non autour de son adresse enregistrée).
   useEffect(() => {
-    if (trackingMode && livePosition) setUserLocation(livePosition);
+    if (!trackingMode || !livePosition) return;
+
+    setUserLocation(livePosition);
+
+    // ✅ Relancer la recherche avec la position GPS live
+    searchProducts({
+      ...filters,
+      latitude: livePosition.latitude,
+      longitude: livePosition.longitude,
+      city: user?.city || '',
+      radius: MAX_DISTANCE_KM
+    }, true);
+    // Note: filters et searchProducts sont intentionnellement exclus des deps
+    // pour éviter une boucle infinie. livePosition est le seul déclencheur voulu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackingMode, livePosition]);
 
   useEffect(() => { checkAccessStatus(); }, [checkAccessStatus]);
@@ -449,7 +542,7 @@ const MapPage = () => {
             }`}
           >
             <Radio className={`h-3.5 w-3.5 ${trackingMode ? 'animate-pulse' : ''}`} />
-            {trackingMode ? 'GPS actif' : 'Me suivre'}
+            {trackingMode ? 'Arrêter le suivi' : 'Je bouge, suis-moi'}
           </button>
         </div>
 
@@ -459,7 +552,7 @@ const MapPage = () => {
             <div className="bg-green-50 rounded-xl px-3 py-2 flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               <p className="text-xs text-green-700 font-medium">
-                Position live · {userLocation.latitude.toFixed(4)}°, {userLocation.longitude.toFixed(4)}°
+                L'app suit votre position · {userLocation.latitude.toFixed(4)}°, {userLocation.longitude.toFixed(4)}°
               </p>
             </div>
           </div>
@@ -476,6 +569,27 @@ const MapPage = () => {
             onClose={() => setShowAutoStopNotification(false)}
             onReactivate={handleReactivateTracking}
           />
+        )}
+
+        {/* ✅ Toast onboarding GPS — affiché une seule fois au premier appui */}
+        {showGpsOnboarding && (
+          <div className="bg-green-600 text-white rounded-2xl p-4 flex items-start gap-3 shadow-lg">
+            <div className="text-2xl flex-shrink-0">📍</div>
+            <div className="flex-1">
+              <p className="font-bold text-sm mb-1">L'app vous suit maintenant !</p>
+              <p className="text-xs text-green-100 leading-relaxed">
+                Tant que ce mode est actif, les revendeurs affichés sont ceux 
+                autour de <strong>votre position actuelle</strong>, pas votre adresse enregistrée. 
+                Appuyez à nouveau sur le bouton pour revenir à votre adresse.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowGpsOnboarding(false)}
+              className="flex-shrink-0 p-1 hover:bg-green-500 rounded-lg transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         )}
 
         {/* Alert banner */}

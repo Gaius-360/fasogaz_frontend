@@ -41,17 +41,13 @@ const Orders = () => {
     needsSubscription
   } = useSellerAccess();
 
-  // États locaux
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  // Filtres
-  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState('all'); // all | delivery | pickup
-  const [statusFilter, setStatusFilter] = useState('all');             // all | pending | active | completed
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  // ✅ Statistiques — `preparing` supprimé partout.
-  //    `active` = accepted + in_delivery
   const [stats, setStats] = useState({
     total: 0,
     delivery: { total: 0, pending: 0, active: 0, completed: 0 },
@@ -60,7 +56,6 @@ const Orders = () => {
     revenue: 0
   });
 
-  // Modals
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [orderToProcess, setOrderToProcess] = useState(null);
@@ -104,7 +99,6 @@ const Orders = () => {
     }
   };
 
-  // ✅ `active` = accepted + in_delivery (preparing supprimé)
   const calculateStats = () => {
     const deliveryOrders = orders.filter(o => o.deliveryMode === 'delivery');
     const pickupOrders   = orders.filter(o => o.deliveryMode === 'pickup');
@@ -129,18 +123,15 @@ const Orders = () => {
     });
   };
 
-  // ✅ Filtre `active` = accepted + in_delivery
   const applyFilters = () => {
     let result = [...orders];
 
-    // Filtre par type de livraison
     if (deliveryTypeFilter === 'delivery') {
       result = result.filter(o => o.deliveryMode === 'delivery');
     } else if (deliveryTypeFilter === 'pickup') {
       result = result.filter(o => o.deliveryMode === 'pickup');
     }
 
-    // Filtre par statut
     if (statusFilter === 'pending') {
       result = result.filter(o => o.status === 'pending');
     } else if (statusFilter === 'active') {
@@ -149,7 +140,6 @@ const Orders = () => {
       result = result.filter(o => o.status === 'completed');
     }
 
-    // Tri : pending en premier, puis par date décroissante
     result.sort((a, b) => {
       if (a.status === 'pending' && b.status !== 'pending') return -1;
       if (b.status === 'pending' && a.status !== 'pending') return 1;
@@ -184,7 +174,6 @@ const Orders = () => {
 
   const confirmAccept = async () => {
     if (!orderToProcess) return;
-
     setProcessing(true);
     try {
       await acceptOrder(orderToProcess.id, parseInt(estimatedTime));
@@ -204,7 +193,6 @@ const Orders = () => {
       setAlert({ type: 'error', message: 'Veuillez indiquer une raison' });
       return;
     }
-
     setProcessing(true);
     try {
       await rejectOrder(orderToProcess.id, rejectionReason);
@@ -221,7 +209,6 @@ const Orders = () => {
 
   const handleComplete = async (order) => {
     if (!window.confirm('Marquer cette commande comme complétée ?')) return;
-
     try {
       await completeOrder(order.id);
       setAlert({ type: 'success', message: 'Commande marquée comme complétée' });
@@ -246,12 +233,7 @@ const Orders = () => {
   }
 
   if (needsSubscription) {
-    return (
-      <SubscriptionRequired
-        accessStatus={accessStatus}
-        pricingConfig={pricingConfig}
-      />
-    );
+    return <SubscriptionRequired accessStatus={accessStatus} pricingConfig={pricingConfig} />;
   }
 
   if (ordersLoading && orders.length === 0) {
@@ -263,18 +245,49 @@ const Orders = () => {
   }
 
   // ==========================================
+  // STATS SELON FILTRE ACTIF
+  // ==========================================
+
+  const activeStats = deliveryTypeFilter === 'delivery'
+    ? stats.delivery
+    : deliveryTypeFilter === 'pickup'
+      ? stats.pickup
+      : stats.byStatus;
+
+  const revenueCard = deliveryTypeFilter === 'all' && (
+    <div className="bg-gradient-to-br from-secondary-50 to-secondary-100 rounded-xl border-2 border-secondary-300 p-3 sm:p-4">
+      <p className="text-xs text-secondary-700 font-semibold mb-1">💰 CA Total</p>
+      <p className="text-lg sm:text-2xl font-bold text-secondary-600 truncate">
+        {Math.round(stats.revenue).toLocaleString()} F
+      </p>
+    </div>
+  );
+
+  const totalCard = deliveryTypeFilter !== 'all' && (
+    <div className="bg-gradient-to-br from-secondary-50 to-secondary-100 rounded-xl border-2 border-secondary-300 p-3 sm:p-4">
+      <div className="flex items-center gap-1.5 mb-1">
+        {deliveryTypeFilter === 'delivery'
+          ? <Truck className="h-3 w-3 text-secondary-600" />
+          : <Store className="h-3 w-3 text-secondary-600" />
+        }
+        <p className="text-xs text-secondary-700 font-semibold truncate">
+          {deliveryTypeFilter === 'delivery' ? 'Total Livraison' : 'Total Retrait'}
+        </p>
+      </div>
+      <p className="text-lg sm:text-2xl font-bold text-secondary-600">{activeStats.total}</p>
+    </div>
+  );
+
+  // ==========================================
   // RENDU PRINCIPAL
   // ==========================================
 
   return (
-    <div className="w-full px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
+    <div className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
       <div className="space-y-4 sm:space-y-6">
 
         {/* Bannière d'accès */}
-        <SellerAccessBanner
-          accessStatus={accessStatus}
-          pricingConfig={pricingConfig}
-        />
+        <SellerAccessBanner accessStatus={accessStatus} pricingConfig={pricingConfig} />
 
         {/* Alertes */}
         {alert && (
@@ -283,220 +296,98 @@ const Orders = () => {
 
         {/* En-tête */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">
+          <h1 className="text-xl sm:text-3xl font-bold text-gray-900 mb-0.5 sm:mb-2">
             Commandes Reçues
           </h1>
-          <p className="text-sm sm:text-base text-gray-600">
-            {stats.total} commande(s) au total
+          <p className="text-xs sm:text-base text-gray-500">
+            {stats.total} commande{stats.total !== 1 ? 's' : ''} au total
           </p>
         </div>
 
         {/* ==========================================
-            FILTRES PAR TYPE DE LIVRAISON
+            FILTRES TYPE DE LIVRAISON — scroll horizontal sur mobile
             ========================================== */}
-        <div className="bg-white rounded-lg border-2 border-neutral-200 p-3 sm:p-4 shadow-sm">
-          <p className="text-xs font-semibold text-neutral-600 mb-3 uppercase tracking-wide">
+        <div className="bg-white rounded-xl border-2 border-neutral-200 p-3 sm:p-4 shadow-sm">
+          <p className="text-xs font-semibold text-neutral-500 mb-2 uppercase tracking-wide">
             Type de livraison
           </p>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            {/* Toutes */}
-            <Button
-              variant={deliveryTypeFilter === 'all' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setDeliveryTypeFilter('all')}
-              className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
-            >
-              <Package className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span>Toutes</span>
-              <span className={`${
-                deliveryTypeFilter === 'all'
-                  ? 'bg-white text-secondary-600'
-                  : 'bg-gray-100 text-gray-700'
-              } px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-bold min-w-[24px] text-center`}>
-                {stats.total}
-              </span>
-            </Button>
-
-            {/* Livraison */}
-            <Button
-              variant={deliveryTypeFilter === 'delivery' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setDeliveryTypeFilter('delivery')}
-              className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
-            >
-              <Truck className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Livraison</span>
-              <span className="sm:hidden">Livr.</span>
-              <span className={`${
-                deliveryTypeFilter === 'delivery'
-                  ? 'bg-white text-secondary-600'
-                  : 'bg-gray-100 text-gray-700'
-              } px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-bold min-w-[24px] text-center`}>
-                {stats.delivery.total}
-              </span>
-            </Button>
-
-            {/* Retrait */}
-            <Button
-              variant={deliveryTypeFilter === 'pickup' ? 'primary' : 'outline'}
-              size="sm"
-              onClick={() => setDeliveryTypeFilter('pickup')}
-              className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
-            >
-              <Store className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Retrait</span>
-              <span className="sm:hidden">Retrait</span>
-              <span className={`${
-                deliveryTypeFilter === 'pickup'
-                  ? 'bg-white text-secondary-600'
-                  : 'bg-gray-100 text-gray-700'
-              } px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-bold min-w-[24px] text-center`}>
-                {stats.pickup.total}
-              </span>
-            </Button>
+          {/* overflow-x-auto + pb-1 pour que la scrollbar ne clipse pas les boutons */}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {[
+              { key: 'all',      label: 'Toutes',   count: stats.total,           icon: <Package className="h-3.5 w-3.5 flex-shrink-0" /> },
+              { key: 'delivery', label: 'Livraison', count: stats.delivery.total,  icon: <Truck className="h-3.5 w-3.5 flex-shrink-0" /> },
+              { key: 'pickup',   label: 'Retrait',   count: stats.pickup.total,    icon: <Store className="h-3.5 w-3.5 flex-shrink-0" /> },
+            ].map(({ key, label, count, icon }) => (
+              <button
+                key={key}
+                onClick={() => setDeliveryTypeFilter(key)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border-2 text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                  deliveryTypeFilter === key
+                    ? 'bg-primary-600 border-primary-600 text-white'
+                    : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-300'
+                }`}
+              >
+                {icon}
+                {label}
+                <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold min-w-[20px] text-center ${
+                  deliveryTypeFilter === key ? 'bg-white/20 text-white' : 'bg-neutral-100 text-neutral-600'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
         {/* ==========================================
-            STATISTIQUES DÉTAILLÉES
+            STATISTIQUES — 2 cols sur mobile, 4 sur desktop
             ========================================== */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {deliveryTypeFilter === 'all' && (
-            <>
-              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg border-2 border-yellow-300 p-3 sm:p-4 shadow-sm">
-                <p className="text-xs sm:text-sm text-yellow-700 font-semibold mb-1">⏳ En attente</p>
-                <p className="text-2xl sm:text-3xl font-bold text-yellow-600">{stats.byStatus.pending}</p>
-              </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl border-2 border-yellow-300 p-3 sm:p-4">
+            <p className="text-xs text-yellow-700 font-semibold mb-1 truncate">⏳ En attente</p>
+            <p className="text-2xl sm:text-3xl font-bold text-yellow-600">{activeStats.pending}</p>
+          </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300 p-3 sm:p-4 shadow-sm">
-                <p className="text-xs sm:text-sm text-blue-700 font-semibold mb-1">🔄 En cours</p>
-                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.byStatus.active}</p>
-              </div>
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border-2 border-blue-300 p-3 sm:p-4">
+            <p className="text-xs text-blue-700 font-semibold mb-1 truncate">🔄 En cours</p>
+            <p className="text-2xl sm:text-3xl font-bold text-blue-600">{activeStats.active}</p>
+          </div>
 
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border-2 border-green-300 p-3 sm:p-4 shadow-sm">
-                <p className="text-xs sm:text-sm text-green-700 font-semibold mb-1">✅ Complétées</p>
-                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.byStatus.completed}</p>
-              </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl border-2 border-green-300 p-3 sm:p-4">
+            <p className="text-xs text-green-700 font-semibold mb-1 truncate">✅ Complétées</p>
+            <p className="text-2xl sm:text-3xl font-bold text-green-600">{activeStats.completed}</p>
+          </div>
 
-              <div className="bg-gradient-to-br from-secondary-50 to-secondary-100 rounded-lg border-2 border-secondary-300 p-3 sm:p-4 shadow-sm">
-                <p className="text-xs sm:text-sm text-secondary-700 font-semibold mb-1">💰 CA Total</p>
-                <p className="text-base sm:text-xl lg:text-2xl font-bold text-secondary-600 truncate">
-                  {Math.round(stats.revenue).toLocaleString()} F
-                </p>
-              </div>
-            </>
-          )}
-
-          {deliveryTypeFilter === 'delivery' && (
-            <>
-              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg border-2 border-yellow-300 p-3 sm:p-4 shadow-sm">
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                  <Truck className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm text-yellow-700 font-semibold truncate">En attente</p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-bold text-yellow-600">{stats.delivery.pending}</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300 p-3 sm:p-4 shadow-sm">
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                  <Truck className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm text-blue-700 font-semibold truncate">En cours</p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.delivery.active}</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border-2 border-green-300 p-3 sm:p-4 shadow-sm">
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                  <Truck className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm text-green-700 font-semibold truncate">Complétées</p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.delivery.completed}</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-secondary-50 to-secondary-100 rounded-lg border-2 border-secondary-300 p-3 sm:p-4 shadow-sm">
-                <p className="text-xs sm:text-sm text-secondary-700 font-semibold mb-1 truncate">📦 Total Livraison</p>
-                <p className="text-2xl sm:text-3xl font-bold text-secondary-600">{stats.delivery.total}</p>
-              </div>
-            </>
-          )}
-
-          {deliveryTypeFilter === 'pickup' && (
-            <>
-              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg border-2 border-yellow-300 p-3 sm:p-4 shadow-sm">
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                  <Store className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm text-yellow-700 font-semibold truncate">En attente</p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-bold text-yellow-600">{stats.pickup.pending}</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border-2 border-blue-300 p-3 sm:p-4 shadow-sm">
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                  <Store className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm text-blue-700 font-semibold truncate">En cours</p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.pickup.active}</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg border-2 border-green-300 p-3 sm:p-4 shadow-sm">
-                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                  <Store className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 flex-shrink-0" />
-                  <p className="text-xs sm:text-sm text-green-700 font-semibold truncate">Complétées</p>
-                </div>
-                <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.pickup.completed}</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-secondary-50 to-secondary-100 rounded-lg border-2 border-secondary-300 p-3 sm:p-4 shadow-sm">
-                <p className="text-xs sm:text-sm text-secondary-700 font-semibold mb-1 truncate">🏪 Total Retrait</p>
-                <p className="text-2xl sm:text-3xl font-bold text-secondary-600">{stats.pickup.total}</p>
-              </div>
-            </>
-          )}
+          {revenueCard}
+          {totalCard}
         </div>
 
         {/* ==========================================
-            FILTRES PAR STATUT
+            FILTRES PAR STATUT — scroll horizontal
             ========================================== */}
-        <div className="bg-white rounded-lg border-2 border-neutral-200 p-3 sm:p-4 shadow-sm">
-          <p className="text-xs font-semibold text-neutral-600 mb-3 uppercase tracking-wide">
-            Statut des commandes
+        <div className="bg-white rounded-xl border-2 border-neutral-200 p-3 sm:p-4 shadow-sm">
+          <p className="text-xs font-semibold text-neutral-500 mb-2 uppercase tracking-wide">
+            Statut
           </p>
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            <Button
-              variant={statusFilter === 'all' ? 'gradient' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter('all')}
-              className="whitespace-nowrap text-xs sm:text-sm font-semibold"
-            >
-              Toutes ({filteredOrders.length})
-            </Button>
-
-            <Button
-              variant={statusFilter === 'pending' ? 'gradient' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter('pending')}
-              className="whitespace-nowrap text-xs sm:text-sm font-semibold"
-            >
-              ⏳ En attente
-            </Button>
-
-            <Button
-              variant={statusFilter === 'active' ? 'gradient' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter('active')}
-              className="whitespace-nowrap text-xs sm:text-sm font-semibold"
-            >
-              🔄 En cours
-            </Button>
-
-            <Button
-              variant={statusFilter === 'completed' ? 'gradient' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter('completed')}
-              className="whitespace-nowrap text-xs sm:text-sm font-semibold"
-            >
-              ✅ Complétées
-            </Button>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {[
+              { key: 'all',       label: `Toutes (${filteredOrders.length})` },
+              { key: 'pending',   label: '⏳ En attente' },
+              { key: 'active',    label: '🔄 En cours' },
+              { key: 'completed', label: '✅ Complétées' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`px-3 py-2 rounded-lg border-2 text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                  statusFilter === key
+                    ? 'gradient-gazbf border-transparent text-white'
+                    : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -504,64 +395,41 @@ const Orders = () => {
             LISTE DES COMMANDES
             ========================================== */}
         {filteredOrders.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border-2 border-neutral-200 p-8 sm:p-12 text-center">
-            {deliveryTypeFilter === 'delivery' ? (
-              <Truck className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-            ) : deliveryTypeFilter === 'pickup' ? (
-              <Store className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-            ) : (
-              <AlertCircle className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-            )}
-            <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">
+          <div className="bg-white rounded-xl border-2 border-neutral-200 p-8 sm:p-12 text-center">
+            {deliveryTypeFilter === 'delivery'
+              ? <Truck className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              : deliveryTypeFilter === 'pickup'
+                ? <Store className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                : <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            }
+            <h3 className="text-sm sm:text-lg font-bold text-gray-900 mb-1">
               Aucune commande trouvée
             </h3>
-            <p className="text-sm sm:text-base text-gray-600">
-              {deliveryTypeFilter === 'delivery' && statusFilter === 'all' &&
-                'Aucune commande de livraison pour le moment'
-              }
-              {deliveryTypeFilter === 'pickup' && statusFilter === 'all' &&
-                'Aucune commande de retrait pour le moment'
-              }
-              {deliveryTypeFilter === 'all' && statusFilter === 'pending' &&
-                'Aucune commande en attente'
-              }
-              {deliveryTypeFilter === 'all' && statusFilter === 'active' &&
-                'Aucune commande en cours'
-              }
-              {deliveryTypeFilter === 'all' && statusFilter === 'completed' &&
-                'Aucune commande complétée'
-              }
-              {deliveryTypeFilter === 'all' && statusFilter === 'all' &&
-                'Vous n\'avez pas encore reçu de commande'
-              }
-              {deliveryTypeFilter !== 'all' && statusFilter !== 'all' &&
-                `Aucune commande ${deliveryTypeFilter === 'delivery' ? 'de livraison' : 'de retrait'} ${
-                  statusFilter === 'pending'   ? 'en attente' :
-                  statusFilter === 'active'    ? 'en cours'   : 'complétée'
-                }`
-              }
+            <p className="text-xs sm:text-base text-gray-500">
+              {deliveryTypeFilter === 'all' && statusFilter === 'all' && 'Vous n\'avez pas encore reçu de commande'}
+              {deliveryTypeFilter === 'delivery' && statusFilter === 'all' && 'Aucune commande de livraison'}
+              {deliveryTypeFilter === 'pickup' && statusFilter === 'all' && 'Aucune commande de retrait'}
+              {statusFilter === 'pending' && 'Aucune commande en attente'}
+              {statusFilter === 'active' && 'Aucune commande en cours'}
+              {statusFilter === 'completed' && 'Aucune commande complétée'}
             </p>
           </div>
         ) : (
           <div>
-            {/* Compteur */}
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm text-neutral-600">
-                <span className="font-bold text-neutral-900">{filteredOrders.length}</span> commande(s) affichée(s)
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs sm:text-sm text-neutral-500">
+                <span className="font-bold text-neutral-800">{filteredOrders.length}</span> commande(s)
               </p>
               {(deliveryTypeFilter !== 'all' || statusFilter !== 'all') && (
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
                   onClick={() => { setDeliveryTypeFilter('all'); setStatusFilter('all'); }}
-                  className="text-xs"
+                  className="text-xs text-primary-600 underline underline-offset-2 font-medium"
                 >
-                  Réinitialiser les filtres
-                </Button>
+                  Réinitialiser
+                </button>
               )}
             </div>
 
-            {/* Grille */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
               {filteredOrders.map((order) => (
                 <OrderSellerCard
@@ -582,48 +450,39 @@ const Orders = () => {
             MODAL ACCEPTATION
             ========================================== */}
         {showAcceptModal && orderToProcess && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto shadow-2xl">
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+            <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 sm:p-6
+                            max-h-[90dvh] overflow-y-auto shadow-2xl">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
                 Accepter la commande
               </h3>
 
-              <div className="flex items-center gap-2 mb-3 sm:mb-4 p-2 sm:p-3 bg-gradient-to-br from-accent-50 to-primary-50 rounded-lg border-2 border-accent-200">
-                {orderToProcess.deliveryMode === 'delivery' ? (
-                  <>
-                    <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-secondary-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm sm:text-base text-gray-900 truncate">
-                        Commande #{orderToProcess.orderNumber}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-600">Livraison à domicile</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Store className="h-4 w-4 sm:h-5 sm:w-5 text-secondary-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm sm:text-base text-gray-900 truncate">
-                        Commande #{orderToProcess.orderNumber}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-600">Retrait sur place</p>
-                    </div>
-                  </>
-                )}
+              <div className="flex items-center gap-3 mb-5 p-3 bg-gradient-to-br from-accent-50 to-primary-50 rounded-xl border-2 border-accent-200">
+                {orderToProcess.deliveryMode === 'delivery'
+                  ? <Truck className="h-5 w-5 text-secondary-600 flex-shrink-0" />
+                  : <Store className="h-5 w-5 text-secondary-600 flex-shrink-0" />
+                }
+                <div className="min-w-0">
+                  <p className="font-bold text-sm text-gray-900 truncate">
+                    Commande #{orderToProcess.orderNumber}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {orderToProcess.deliveryMode === 'delivery' ? 'Livraison à domicile' : 'Retrait sur place'}
+                  </p>
+                </div>
               </div>
 
-              
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4 sm:mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => { setShowAcceptModal(false); setOrderToProcess(null); }}
-                  disabled={processing}
-                  className="w-full sm:w-auto"
-                >
-                  Annuler
-                </Button>
+              <div className="flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button variant="primary" fullWidth onClick={confirmAccept} loading={processing}>
                   Accepter la commande
+                </Button>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  onClick={() => { setShowAcceptModal(false); setOrderToProcess(null); }}
+                  disabled={processing}
+                >
+                  Annuler
                 </Button>
               </div>
             </div>
@@ -634,86 +493,83 @@ const Orders = () => {
             MODAL REJET
             ========================================== */}
         {showRejectModal && orderToProcess && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl max-w-md w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto shadow-2xl">
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+            <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 sm:p-6
+                            max-h-[90dvh] overflow-y-auto shadow-2xl">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
                 Rejeter la commande
               </h3>
 
-              <div className="flex items-center gap-2 mb-3 sm:mb-4 p-2 sm:p-3 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border-2 border-red-200">
-                {orderToProcess.deliveryMode === 'delivery' ? (
-                  <>
-                    <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm sm:text-base text-gray-900 truncate">
-                        Commande #{orderToProcess.orderNumber}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-600">Livraison à domicile</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Store className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm sm:text-base text-gray-900 truncate">
-                        Commande #{orderToProcess.orderNumber}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-600">Retrait sur place</p>
-                    </div>
-                  </>
-                )}
+              <div className="flex items-center gap-3 mb-4 p-3 bg-gradient-to-br from-red-50 to-red-100 rounded-xl border-2 border-red-200">
+                {orderToProcess.deliveryMode === 'delivery'
+                  ? <Truck className="h-5 w-5 text-red-600 flex-shrink-0" />
+                  : <Store className="h-5 w-5 text-red-600 flex-shrink-0" />
+                }
+                <div className="min-w-0">
+                  <p className="font-bold text-sm text-gray-900 truncate">
+                    Commande #{orderToProcess.orderNumber}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {orderToProcess.deliveryMode === 'delivery' ? 'Livraison à domicile' : 'Retrait sur place'}
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
+              <div className="space-y-1 mb-4">
                 {[
                   'Produit en rupture de stock',
                   'Hors zone de livraison',
                   'Fermé actuellement'
                 ].map((reason) => (
-                  <label key={reason} className="flex items-start sm:items-center cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors">
+                  <label
+                    key={reason}
+                    className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-xl transition-colors"
+                  >
                     <input
                       type="radio"
                       name="reason"
                       value={reason}
                       checked={rejectionReason === reason}
                       onChange={(e) => setRejectionReason(e.target.value)}
-                      className="mr-2 mt-0.5 sm:mt-0 flex-shrink-0"
+                      className="flex-shrink-0 accent-primary-600"
                     />
-                    <span className="text-xs sm:text-sm">{reason}</span>
+                    <span className="text-sm font-medium text-neutral-800">{reason}</span>
                   </label>
                 ))}
-                <label className="flex items-start sm:items-center cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors">
+                <label className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-xl transition-colors">
                   <input
                     type="radio"
                     name="reason"
                     value="other"
                     checked={!['Produit en rupture de stock', 'Hors zone de livraison', 'Fermé actuellement'].includes(rejectionReason)}
                     onChange={() => setRejectionReason('')}
-                    className="mr-2 mt-0.5 sm:mt-0 flex-shrink-0"
+                    className="flex-shrink-0 accent-primary-600"
                   />
-                  <span className="text-xs sm:text-sm">Autre raison</span>
+                  <span className="text-sm font-medium text-neutral-800">Autre raison</span>
                 </label>
               </div>
 
               {!['Produit en rupture de stock', 'Hors zone de livraison', 'Fermé actuellement'].includes(rejectionReason) && (
-                <Input
-                  placeholder="Précisez la raison du rejet..."
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                />
+                <div className="mb-4">
+                  <Input
+                    placeholder="Précisez la raison du rejet..."
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                  />
+                </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4 sm:mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => { setShowRejectModal(false); setOrderToProcess(null); setRejectionReason(''); }}
-                  disabled={processing}
-                  className="w-full sm:w-auto"
-                >
-                  Annuler
-                </Button>
+              <div className="flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button variant="danger" fullWidth onClick={confirmReject} loading={processing}>
                   Rejeter la commande
+                </Button>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  onClick={() => { setShowRejectModal(false); setOrderToProcess(null); setRejectionReason(''); }}
+                  disabled={processing}
+                >
+                  Annuler
                 </Button>
               </div>
             </div>

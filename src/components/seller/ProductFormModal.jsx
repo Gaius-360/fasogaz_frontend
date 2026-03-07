@@ -80,15 +80,26 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
+      {/*
+        FIX MOBILE :
+        - CSS Grid avec 3 rows : header (auto) / scroll (1fr) / footer (auto)
+        - minHeight: 0 sur la zone scroll est OBLIGATOIRE pour que 1fr scroll correctement
+        - mb-[60px] sur mobile pour ne pas passer sous la bottom nav de l'app
+        - Les boutons sont dans le footer (row 3), jamais cachés par le clavier ou la nav
+      */}
       <div
-        className="relative bg-white w-full max-w-md rounded-2xl flex flex-col shadow-2xl overflow-hidden"
-        style={{ maxHeight: '85vh' }}
+        className="relative bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl mb-[60px] sm:mb-0"
+        style={{
+          maxHeight: 'calc(90dvh - 60px)',
+          display: 'grid',
+          gridTemplateRows: 'auto 1fr auto'
+        }}
       >
-        {/* Header */}
-        <div className="gradient-gazbf p-5 flex-shrink-0">
+        {/* Header — row 1 */}
+        <div className="gradient-gazbf p-5 rounded-t-2xl">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors text-white"
@@ -110,13 +121,13 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* Zone scrollable */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+        {/* Zone scrollable — row 2, minHeight:0 indispensable */}
+        <div className="overflow-y-auto overscroll-contain p-5" style={{ minHeight: 0 }}>
           {alert && (
             <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} className="mb-4" />
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-4">
             {/* Type de bouteille */}
             <div>
               <label className="block text-sm font-bold text-neutral-900 mb-2">
@@ -188,23 +199,34 @@ const ProductFormModal = ({ product, onClose, onSuccess }) => {
               required
               helpText="Statut automatique: >5 = Disponible, 1-5 = Limité, 0 = Rupture"
             />
+          </div>
+        </div>
 
-            {/* Boutons dans le scroll */}
-            <div className="flex gap-3 pt-2 pb-2">
-              <Button variant="outline" onClick={onClose} disabled={loading} type="button">
-                Annuler
-              </Button>
-              <Button
-                type="submit"
-                variant="gradient"
-                fullWidth
-                loading={loading}
-                className="h-12 text-base font-bold shadow-gazbf-lg"
-              >
-                {isEdit ? 'Mettre à jour' : 'Créer le produit'}
-              </Button>
-            </div>
-          </form>
+        {/* Footer boutons — row 3, toujours visible */}
+        <div
+          className="p-4 sm:p-5 border-t-2 border-neutral-100 bg-white"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={loading}
+              type="button"
+              className="flex-1"
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              variant="gradient"
+              onClick={handleSubmit}
+              loading={loading}
+              className="flex-1 h-12 text-base font-bold shadow-gazbf-lg"
+            >
+              {isEdit ? 'Mettre à jour' : 'Créer le produit'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
