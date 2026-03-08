@@ -1,6 +1,7 @@
 // ==========================================
 // FICHIER: src/pages/client/OrdersPage.jsx
-// ✅ SIMPLIFIÉ: `preparing` supprimé du statusConfig dans getStatusBadge
+// ✅ CORRIGÉ: Ajout du statut `expired` groupé avec les annulées
+// ✅ CORRIGÉ: Rechargement automatique au focus de la fenêtre
 // ==========================================
 
 import React, { useState, useEffect } from 'react';
@@ -27,8 +28,12 @@ const OrdersPage = () => {
   const [orderToReview, setOrderToReview] = useState(null);
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // ✅ CORRIGÉ: rechargement initial + au focus de la fenêtre/app
   useEffect(() => {
     loadOrders();
+    const handleFocus = () => loadOrders();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   const loadOrders = async () => {
@@ -90,25 +95,31 @@ const OrdersPage = () => {
     }
   };
 
-  // Filtrer les commandes
+  // ✅ CORRIGÉ: `expired` groupé avec les annulées dans le filtre
   const filteredOrders = selectedStatus === 'all'
     ? orders
     : orders.filter(order => {
         if (selectedStatus === 'cancelled') {
-          return order.status === 'cancelled' || order.status === 'rejected';
+          return order.status === 'cancelled' ||
+                 order.status === 'rejected'  ||
+                 order.status === 'expired';   // ✅ AJOUT
         }
         return order.status === selectedStatus;
       });
 
-  // Stats
+  // ✅ CORRIGÉ: `expired` comptabilisé dans cancelled
   const stats = {
     total:     orders.length,
     pending:   orders.filter(o => o.status === 'pending').length,
     completed: orders.filter(o => o.status === 'completed').length,
-    cancelled: orders.filter(o => o.status === 'cancelled' || o.status === 'rejected').length
+    cancelled: orders.filter(o =>
+      o.status === 'cancelled' ||
+      o.status === 'rejected'  ||
+      o.status === 'expired'    // ✅ AJOUT
+    ).length
   };
 
-  // ✅ `preparing` supprimé du statusConfig
+  // ✅ CORRIGÉ: `expired` ajouté dans statusConfig avec badge orange distinctif
   const getStatusBadge = (status) => {
     const statusConfig = {
       pending:     { color: 'bg-yellow-100 text-yellow-800',  icon: Clock,        label: 'En attente' },
@@ -116,7 +127,8 @@ const OrdersPage = () => {
       in_delivery: { color: 'bg-indigo-100 text-indigo-800',  icon: Package,      label: 'En livraison' },
       completed:   { color: 'bg-green-100 text-green-800',    icon: CheckCircle,  label: 'Complétée' },
       cancelled:   { color: 'bg-gray-100 text-gray-800',      icon: XCircle,      label: 'Annulée' },
-      rejected:    { color: 'bg-red-100 text-red-800',        icon: XCircle,      label: 'Rejetée' }
+      rejected:    { color: 'bg-red-100 text-red-800',        icon: XCircle,      label: 'Rejetée' },
+      expired:     { color: 'bg-orange-100 text-orange-800',  icon: Clock,        label: 'Expirée' }, // ✅ AJOUT
     };
 
     const config = statusConfig[status] || statusConfig.pending;
@@ -317,6 +329,21 @@ const OrdersPage = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs sm:text-sm font-medium text-red-800">Raison du rejet</p>
                       <p className="text-xs sm:text-sm text-red-700 mt-1">{order.rejectionReason}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ✅ AJOUT: Message informatif pour les commandes expirées */}
+              {order.status === 'expired' && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-3 sm:mb-4">
+                  <div className="flex items-start gap-2">
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-orange-800">Commande expirée</p>
+                      <p className="text-xs sm:text-sm text-orange-700 mt-1">
+                        Le revendeur n'a pas répondu à temps. Vous pouvez passer une nouvelle commande.
+                      </p>
                     </div>
                   </div>
                 </div>

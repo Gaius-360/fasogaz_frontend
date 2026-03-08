@@ -1,30 +1,178 @@
 // ==========================================
-// FICHIER: src/pages/client/MapPage.jsx - VERSION MOBILE OPTIMISÉE
-// ✅ Fix: Ne pas écraser les données d'accès
-// ✅ Mobile-first design professionnel
-// ✅ Fix GPS tracking: position live prioritaire sur l'adresse enregistrée
-// ✅ UX: Libellés bouton clairs + toast onboarding au premier appui GPS
+// FICHIER: src/pages/client/MapPage.jsx
 // ==========================================
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Loader2, AlertCircle, Navigation, Plus, Clock, Lock, Radio, CreditCard, X, ChevronRight, Flame } from 'lucide-react';
+import {
+  MapPin, Loader2, AlertCircle, Navigation, Plus, Clock, Lock,
+  Radio, CreditCard, X, ChevronRight, Flame, Check, Star,
+  ChevronDown, Settings2
+} from 'lucide-react';
 import SearchFilters from '../../components/client/SearchFilters';
 import SellerCard from '../../components/client/SellerCard';
 import SellerDetailsModal from '../../components/client/SellerDetailsModal';
 import AddAddressModal from '../../components/client/AddAddressModal';
 import TrackingNotification from '../../components/common/TrackingNotification';
 import Alert from '../../components/common/Alert';
-import Button from '../../components/common/Button';
 import { api } from '../../api/apiSwitch';
 import useAuthStore from '../../store/authStore';
 import { useGeolocationContext } from '../../contexts/GeolocationContext';
 import { getCurrentPosition, openNavigationToLocation } from '../../utils/helpers';
 
+// ─── Drawer de sélection rapide d'adresse ────────────────────────────────────
+// Affiché quand l'utilisateur appuie sur la barre d'adresse active.
+// Permet de changer l'adresse de référence sans quitter la page.
+const AddressDrawer = ({ addresses, activeAddressId, onSelect, onClose, onAddNew }) => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true));
+    return () => {};
+  }, []);
+
+  const close = () => {
+    setVisible(false);
+    setTimeout(onClose, 280);
+  };
+
+  const handleSelect = (address) => {
+    onSelect(address);
+    close();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end"
+      style={{
+        background: `rgba(0,0,0,${visible ? .45 : 0})`,
+        backdropFilter: `blur(${visible ? 4 : 0}px)`,
+        transition: 'background .28s ease, backdrop-filter .28s ease',
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+    >
+      <div
+        className="w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden"
+        style={{
+          transform: visible ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform .3s cubic-bezier(.32,.72,0,1)',
+          paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))',
+          maxHeight: '70vh',
+        }}
+      >
+        {/* drag handle */}
+        <div className="flex justify-center pt-3 pb-4">
+          <div className="w-10 h-1 bg-gray-200 rounded-full" />
+        </div>
+
+        {/* titre */}
+        <div className="px-5 pb-3 flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-gray-900">Changer d'adresse</h3>
+          <button onClick={close} className="p-1.5 rounded-full bg-gray-100 text-gray-500">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* liste */}
+        <div className="overflow-y-auto px-4 space-y-2" style={{ maxHeight: 'calc(70vh - 120px)' }}>
+          {addresses.map((address) => {
+            const isActive = address.id === activeAddressId;
+            return (
+              <button
+                key={address.id}
+                type="button"
+                onClick={() => handleSelect(address)}
+                className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all active:scale-[.98]
+                  ${isActive
+                    ? 'border-orange-300 bg-orange-50'
+                    : 'border-gray-100 bg-white hover:border-gray-200'
+                  }`}
+              >
+                {/* icône */}
+                <div className={`p-2 rounded-xl flex-shrink-0 ${isActive ? 'bg-orange-100' : 'bg-gray-100'}`}>
+                  <MapPin className={`h-4 w-4 ${isActive ? 'text-orange-600' : 'text-gray-400'}`} />
+                </div>
+
+                {/* texte */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm font-bold truncate ${isActive ? 'text-orange-900' : 'text-gray-800'}`}>
+                      {address.label}
+                    </p>
+                    {address.isDefault && (
+                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded-full font-semibold flex-shrink-0">
+                        <Star className="h-2.5 w-2.5 fill-orange-400" />
+                        Défaut
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">
+                    {address.additionalInfo || address.city}
+                  </p>
+                </div>
+
+                {/* check actif */}
+                {isActive && (
+                  <div className="flex-shrink-0 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                    <Check className="h-3 w-3 text-white" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+
+          {/* bouton ajouter */}
+          <button
+            type="button"
+            onClick={() => { close(); setTimeout(onAddNew, 300); }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-gray-400 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50 transition-all mt-1"
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter une adresse
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Barre d'adresse active ───────────────────────────────────────────────────
+// Bande discrète sous le header qui indique quelle adresse est utilisée
+// comme référence de distance. Appuyable pour changer rapidement.
+const ActiveAddressBar = ({ address, trackingMode, onPress }) => {
+  if (trackingMode) return null; // en mode tracking GPS, inutile d'afficher l'adresse fixe
+
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      className="w-full flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 border-b border-gray-100 text-left transition-colors hover:bg-gray-100 active:bg-gray-100"
+    >
+      {/* dot */}
+      <div className="w-2 h-2 bg-orange-400 rounded-full flex-shrink-0" />
+
+      {/* label */}
+      <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+        <span className="text-xs text-gray-400 flex-shrink-0">Résultats pour</span>
+        <span className="text-xs font-bold text-gray-700 truncate">{address?.label || '—'}</span>
+        {address?.isDefault && (
+          <span className="text-xs text-gray-400 flex-shrink-0">(par défaut)</span>
+        )}
+      </div>
+
+      {/* action hint */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <span className="text-xs text-orange-500 font-semibold">Changer</span>
+        <ChevronDown className="h-3.5 w-3.5 text-orange-400" />
+      </div>
+    </button>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
 const MapPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  
+
   const {
     position: livePosition,
     isTracking,
@@ -42,48 +190,42 @@ const MapPage = () => {
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [addresses, setAddresses] = useState([]);
+  // ID de l'adresse utilisée comme référence de distance (peut différer de isDefault)
+  const [activeAddressId, setActiveAddressId] = useState(null);
   const [alert, setAlert] = useState(null);
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
   const [showAccessModal, setShowAccessModal] = useState(false);
+  const [showAddressDrawer, setShowAddressDrawer] = useState(false);
   const [trackingMode, setTrackingMode] = useState(false);
   const [lastSearchPosition, setLastSearchPosition] = useState(null);
   const [showAutoStopNotification, setShowAutoStopNotification] = useState(false);
-  // ✅ Toast onboarding GPS — affiché une seule fois au premier appui
   const [showGpsOnboarding, setShowGpsOnboarding] = useState(false);
   const GPS_ONBOARDING_KEY = 'fasogaz_gps_onboarding_seen';
 
-  // ✅ FIX: Ref pour lire la valeur live de trackingMode sans problème de closure stale
   const trackingModeRef = useRef(false);
+  useEffect(() => { trackingModeRef.current = trackingMode; }, [trackingMode]);
 
-  // ✅ FIX: Synchroniser la ref avec l'état à chaque changement
-  useEffect(() => {
-    trackingModeRef.current = trackingMode;
-  }, [trackingMode]);
-  
   const [accessStatus, setAccessStatus] = useState({
-    hasAccess: false,
-    accessType: 'none',
-    expiresAt: null,
-    remainingHours: 0,
-    remainingMinutes: 0,
-    price: null,
-    duration: null
+    hasAccess: false, accessType: 'none', expiresAt: null,
+    remainingHours: 0, remainingMinutes: 0, price: null, duration: null
   });
 
   const [filters, setFilters] = useState({
-    bottleType: '',
-    brand: '',
-    minPrice: '',
-    maxPrice: '',
-    radius: '10'
+    bottleType: '', brand: '', minPrice: '', maxPrice: '', radius: '10'
   });
 
   const MAX_DISTANCE_KM = 10;
   const MIN_MOVEMENT_FOR_REFRESH = 100;
   const isSearchingRef = useRef(false);
 
+  // Adresse active dérivée
+  const activeAddress = addresses.find(a => a.id === activeAddressId)
+    || addresses.find(a => a.isDefault)
+    || addresses[0]
+    || null;
+
   useEffect(() => {
-    setOnAutoStop((reason) => {
+    setOnAutoStop(() => {
       setTrackingMode(false);
       trackingModeRef.current = false;
       setShowAutoStopNotification(true);
@@ -95,13 +237,7 @@ const MapPage = () => {
             longitude: parseFloat(defaultAddress.longitude)
           };
           setUserLocation(location);
-          searchProducts({
-            ...filters,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            city: user?.city || '',
-            radius: MAX_DISTANCE_KM
-          }, true);
+          searchProducts({ ...filters, latitude: location.latitude, longitude: location.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
         }
       }
     });
@@ -111,32 +247,21 @@ const MapPage = () => {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }, []);
 
-  const filterSellersByDistance = (sellersArray) => {
-    return sellersArray.filter(seller =>
-      seller.distance !== null && seller.distance !== undefined && seller.distance <= MAX_DISTANCE_KM
-    );
-  };
+  const filterSellersByDistance = (sellersArray) =>
+    sellersArray.filter(s => s.distance !== null && s.distance !== undefined && s.distance <= MAX_DISTANCE_KM);
 
   const checkAccessStatus = useCallback(async () => {
     try {
       const response = await api.access.checkStatus();
       if (response?.success) {
-        const status = response.data;
-        setAccessStatus({
-          hasAccess: status.hasAccess,
-          accessType: status.accessType,
-          expiresAt: status.expiresAt,
-          remainingHours: status.remainingHours || 0,
-          remainingMinutes: status.remainingMinutes || 0,
-          price: status.price,
-          duration: status.duration
-        });
+        const s = response.data;
+        setAccessStatus({ hasAccess: s.hasAccess, accessType: s.accessType, expiresAt: s.expiresAt, remainingHours: s.remainingHours || 0, remainingMinutes: s.remainingMinutes || 0, price: s.price, duration: s.duration });
       }
-    } catch (error) {
+    } catch {
       setAccessStatus({ hasAccess: false, accessType: 'error', expiresAt: null, remainingHours: 0, remainingMinutes: 0 });
     } finally {
       setLoadingAccess(false);
@@ -174,39 +299,33 @@ const MapPage = () => {
           setAlert({ type: 'info', message: '💡 Achetez un accès 24h pour voir les coordonnées et obtenir les itinéraires' });
         }
       }
-    } catch (error) {
+    } catch {
       setAlert({ type: 'error', message: 'Erreur lors de la recherche des revendeurs' });
     } finally {
       isSearchingRef.current = false;
     }
   }, [user?.city, user?.id]);
 
-  // ✅ FIX: Utiliser trackingModeRef (toujours à jour) au lieu de trackingMode (closure stale)
-  // Cela évite que loadAddresses écrase userLocation avec l'adresse enregistrée
-  // alors que le mode GPS live est actif.
   const loadAddresses = useCallback(async () => {
     try {
       const response = await api.addresses.getMyAddresses();
       if (response?.success) {
         const addressList = response.data || [];
         setAddresses(addressList);
-        // ✅ trackingModeRef.current est toujours la valeur live, pas une valeur capturée
         if (addressList.length > 0 && !trackingModeRef.current) {
           const defaultAddress = addressList.find(a => a.isDefault) || addressList[0];
+          setActiveAddressId(defaultAddress.id);
           if (defaultAddress.latitude && defaultAddress.longitude) {
-            setUserLocation({
-              latitude: parseFloat(defaultAddress.latitude),
-              longitude: parseFloat(defaultAddress.longitude)
-            });
+            setUserLocation({ latitude: parseFloat(defaultAddress.latitude), longitude: parseFloat(defaultAddress.longitude) });
           }
         }
       }
-    } catch (error) {
+    } catch {
       setAddresses([]);
     } finally {
       setLoadingAddresses(false);
     }
-  }, []); // ✅ Plus de dépendance sur trackingMode — on utilise la ref
+  }, []);
 
   const loadProducts = useCallback(async (location) => {
     setLoading(true);
@@ -224,44 +343,40 @@ const MapPage = () => {
           await searchProducts({ ...filters, city: user?.city || '', radius: MAX_DISTANCE_KM });
         }
       }
-    } catch (error) {
-      console.error('❌ Erreur chargement produits:', error);
-    } finally {
-      setLoading(false);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [filters, searchProducts, user?.city]);
+
+  // ── Sélection rapide d'une adresse depuis le drawer ──────────────────────────
+  const handleSelectAddress = useCallback((address) => {
+    if (!address.latitude || !address.longitude) {
+      setAlert({ type: 'error', message: `"${address.label}" n'a pas de coordonnées GPS.` });
+      return;
     }
+    const location = { latitude: parseFloat(address.latitude), longitude: parseFloat(address.longitude) };
+    setActiveAddressId(address.id);
+    setUserLocation(location);
+    searchProducts({ ...filters, latitude: location.latitude, longitude: location.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
+    setAlert({ type: 'success', message: `📍 Résultats mis à jour pour « ${address.label} »` });
   }, [filters, searchProducts, user?.city]);
 
   const handleToggleTracking = useCallback(async () => {
     if (trackingMode) {
-      // ── Désactivation du tracking ──────────────────────────────────────────
       disableTracking();
       setTrackingMode(false);
       trackingModeRef.current = false;
-
-      // Revenir à l'adresse enregistrée comme référence
       if (addresses.length > 0) {
-        const defaultAddress = addresses.find(a => a.isDefault) || addresses[0];
-        if (defaultAddress.latitude && defaultAddress.longitude) {
-          const location = {
-            latitude: parseFloat(defaultAddress.latitude),
-            longitude: parseFloat(defaultAddress.longitude)
-          };
+        const ref = addresses.find(a => a.id === activeAddressId) || addresses.find(a => a.isDefault) || addresses[0];
+        if (ref?.latitude && ref?.longitude) {
+          const location = { latitude: parseFloat(ref.latitude), longitude: parseFloat(ref.longitude) };
           setUserLocation(location);
-          searchProducts({
-            ...filters,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            city: user?.city || '',
-            radius: MAX_DISTANCE_KM
-          }, true);
+          searchProducts({ ...filters, latitude: location.latitude, longitude: location.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
         }
       }
       setAlert({ type: 'info', message: '📍 Mode position fixe activé' });
     } else {
-      // ── Activation du tracking ─────────────────────────────────────────────
       try {
         setAlert({ type: 'info', message: '📡 Obtention de votre position GPS...' });
-
         const currentPos = await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy }),
@@ -269,69 +384,33 @@ const MapPage = () => {
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         });
-
-        // ✅ Utiliser la position GPS live comme référence immédiatement
         setUserLocation(currentPos);
         setLastSearchPosition(currentPos);
-
-        // ✅ Rechercher les revendeurs autour de la position GPS live (pas l'adresse)
-        await searchProducts({
-          ...filters,
-          latitude: currentPos.latitude,
-          longitude: currentPos.longitude,
-          city: user?.city || '',
-          radius: MAX_DISTANCE_KM
-        }, true);
-
-        // ✅ Activer le suivi continu — chaque mise à jour utilise newPosition (GPS live)
+        await searchProducts({ ...filters, latitude: currentPos.latitude, longitude: currentPos.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
         enableTracking((newPosition) => {
           if (lastSearchPosition) {
-            const distance = calculateDistance(
-              lastSearchPosition.latitude,
-              lastSearchPosition.longitude,
-              newPosition.latitude,
-              newPosition.longitude
-            );
+            const distance = calculateDistance(lastSearchPosition.latitude, lastSearchPosition.longitude, newPosition.latitude, newPosition.longitude);
             if (distance < MIN_MOVEMENT_FOR_REFRESH) return;
           }
-
           setLastSearchPosition(newPosition);
-          // ✅ userLocation = position GPS live, pas l'adresse enregistrée
           setUserLocation(newPosition);
-
-          // ✅ Recherche autour de la position GPS live
-          searchProducts({
-            ...filters,
-            latitude: newPosition.latitude,
-            longitude: newPosition.longitude,
-            city: user?.city || '',
-            radius: MAX_DISTANCE_KM
-          }, true);
+          searchProducts({ ...filters, latitude: newPosition.latitude, longitude: newPosition.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
         });
-
         setTrackingMode(true);
         trackingModeRef.current = true;
-
-        // ✅ Afficher le toast onboarding une seule fois au premier appui
         const alreadySeen = localStorage.getItem(GPS_ONBOARDING_KEY);
         if (!alreadySeen) {
           setShowGpsOnboarding(true);
           localStorage.setItem(GPS_ONBOARDING_KEY, 'true');
-          // Masquer automatiquement après 5 secondes
           setTimeout(() => setShowGpsOnboarding(false), 5000);
         }
-
         setAlert({ type: 'success', message: '🎯 Suivi GPS activé' });
-
       } catch (gpsError) {
-        let errorMessage = '❌ Impossible d\'obtenir votre position GPS';
-        if (gpsError.code === 1) errorMessage = '❌ Permission GPS refusée';
-        else if (gpsError.code === 2) errorMessage = '❌ Position GPS non disponible';
-        else if (gpsError.code === 3) errorMessage = '❌ Délai GPS dépassé';
-        setAlert({ type: 'error', message: errorMessage });
+        const msg = gpsError.code === 1 ? '❌ Permission GPS refusée' : gpsError.code === 2 ? '❌ Position GPS non disponible' : gpsError.code === 3 ? '❌ Délai GPS dépassé' : '❌ Impossible d\'obtenir votre position GPS';
+        setAlert({ type: 'error', message: msg });
       }
     }
-  }, [trackingMode, enableTracking, disableTracking, filters, user?.city, lastSearchPosition, calculateDistance, searchProducts, addresses]);
+  }, [trackingMode, enableTracking, disableTracking, filters, user?.city, lastSearchPosition, calculateDistance, searchProducts, addresses, activeAddressId]);
 
   const handleReactivateTracking = useCallback(async () => {
     setShowAutoStopNotification(false);
@@ -341,27 +420,16 @@ const MapPage = () => {
   const handleApplyFilters = (newFilters) => {
     const limitedFilters = { ...newFilters, radius: Math.min(parseFloat(newFilters.radius) || 10, MAX_DISTANCE_KM).toString() };
     setFilters(limitedFilters);
-    if (userLocation) {
-      searchProducts({ ...limitedFilters, latitude: userLocation.latitude, longitude: userLocation.longitude, city: user?.city || '' }, true);
-    } else {
-      searchProducts({ ...limitedFilters, city: user?.city || '' }, true);
-    }
+    if (userLocation) searchProducts({ ...limitedFilters, latitude: userLocation.latitude, longitude: userLocation.longitude, city: user?.city || '' }, true);
+    else searchProducts({ ...limitedFilters, city: user?.city || '' }, true);
   };
 
-  const handleCall = (phone) => {
-    if (!accessStatus.hasAccess) { setShowAccessModal(true); return; }
-    window.location.href = `tel:${phone}`;
-  };
-
+  const handleCall     = (phone)  => { if (!accessStatus.hasAccess) { setShowAccessModal(true); return; } window.location.href = `tel:${phone}`; };
   const handleNavigate = (seller) => {
     if (!accessStatus.hasAccess) { setShowAccessModal(true); return; }
-    if (seller.latitude && seller.longitude) {
-      openNavigationToLocation(seller.latitude, seller.longitude, seller.businessName || `Dépôt ${seller.quarter || seller.city}`, userLocation);
-    } else {
-      setAlert({ type: 'error', message: 'Coordonnées GPS du revendeur non disponibles' });
-    }
+    if (seller.latitude && seller.longitude) openNavigationToLocation(seller.latitude, seller.longitude, seller.businessName || `Dépôt ${seller.quarter || seller.city}`, userLocation);
+    else setAlert({ type: 'error', message: 'Coordonnées GPS du revendeur non disponibles' });
   };
-
   const handleOrder = (seller, products) => {
     if (!accessStatus.hasAccess) { setShowAccessModal(true); return; }
     navigate('/client/order/new', { state: { seller, products } });
@@ -376,6 +444,7 @@ const MapPage = () => {
       const newAddress = response.data.find(a => a.isDefault) || response.data[0];
       if (newAddress.latitude && newAddress.longitude) {
         const location = { latitude: parseFloat(newAddress.latitude), longitude: parseFloat(newAddress.longitude) };
+        setActiveAddressId(newAddress.id);
         setUserLocation(location);
         await loadProducts(location);
       }
@@ -389,34 +458,13 @@ const MapPage = () => {
     if (userLocation) loadProducts(userLocation);
   };
 
-  const handleBuyAccess = () => {
-    setShowAccessModal(false);
-    navigate('/client/access/purchase');
-  };
+  const handleBuyAccess = () => { setShowAccessModal(false); navigate('/client/access/purchase'); };
+  const formatRemainingTime = () => accessStatus.hasAccess ? `${accessStatus.remainingHours}h ${accessStatus.remainingMinutes}min` : null;
 
-  const formatRemainingTime = () => {
-    if (!accessStatus.hasAccess) return null;
-    return `${accessStatus.remainingHours}h ${accessStatus.remainingMinutes}min`;
-  };
-
-  // ✅ FIX: En mode tracking, livePosition met à jour userLocation ET relance la recherche
-  // C'est ici que la magie opère : à chaque nouvelle position GPS reçue du contexte,
-  // on recherche les revendeurs autour du client (et non autour de son adresse enregistrée).
   useEffect(() => {
     if (!trackingMode || !livePosition) return;
-
     setUserLocation(livePosition);
-
-    // ✅ Relancer la recherche avec la position GPS live
-    searchProducts({
-      ...filters,
-      latitude: livePosition.latitude,
-      longitude: livePosition.longitude,
-      city: user?.city || '',
-      radius: MAX_DISTANCE_KM
-    }, true);
-    // Note: filters et searchProducts sont intentionnellement exclus des deps
-    // pour éviter une boucle infinie. livePosition est le seul déclencheur voulu.
+    searchProducts({ ...filters, latitude: livePosition.latitude, longitude: livePosition.longitude, city: user?.city || '', radius: MAX_DISTANCE_KM }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackingMode, livePosition]);
 
@@ -429,7 +477,7 @@ const MapPage = () => {
     }
   }, [loadingAccess, loadingAddresses, addresses.length]);
 
-  // ─── LOADING SCREEN ─────────────────────────────────────────────────────────
+  // ─── LOADING SCREEN ──────────────────────────────────────────────────────────
   if (loadingAccess || loadingAddresses) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-6">
@@ -451,7 +499,6 @@ const MapPage = () => {
   if (addresses.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
-        {/* Header */}
         <div className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center">
@@ -460,9 +507,7 @@ const MapPage = () => {
             <h1 className="text-lg font-bold text-gray-900">Trouver du gaz</h1>
           </div>
         </div>
-
         <div className="flex-1 flex flex-col items-center justify-center px-6 py-10">
-          {/* Illustration */}
           <div className="relative mb-8">
             <div className="w-24 h-24 rounded-3xl bg-blue-50 flex items-center justify-center shadow-sm">
               <Navigation className="h-12 w-12 text-blue-500" />
@@ -471,37 +516,19 @@ const MapPage = () => {
               <Plus className="h-4 w-4 text-orange-600" />
             </div>
           </div>
-
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-3">
-            Enregistrez votre adresse
-          </h2>
-          <p className="text-gray-500 text-center text-base leading-relaxed mb-2">
-            Pour trouver du gaz près de chez vous, ajoutez votre adresse avec position GPS.
-          </p>
-          <p className="text-gray-400 text-center text-sm mb-8">
-            Cela permet de calculer les distances avec les revendeurs.
-          </p>
-
-          {/* Warning card */}
+          <h2 className="text-2xl font-bold text-gray-900 text-center mb-3">Enregistrez votre adresse</h2>
+          <p className="text-gray-500 text-center text-base leading-relaxed mb-2">Pour trouver du gaz près de chez vous, ajoutez votre adresse avec position GPS.</p>
+          <p className="text-gray-400 text-center text-sm mb-8">Cela permet de calculer les distances avec les revendeurs.</p>
           <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-700 leading-snug">
-              Activez la géolocalisation sur votre téléphone pour une meilleure précision.
-            </p>
+            <p className="text-sm text-amber-700 leading-snug">Activez la géolocalisation sur votre téléphone pour une meilleure précision.</p>
           </div>
-
-          <button
-            onClick={() => setShowAddAddressModal(true)}
-            className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-orange-200"
-          >
+          <button onClick={() => setShowAddAddressModal(true)} className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-lg shadow-orange-200">
             <Plus className="h-5 w-5" />
             Ajouter mon adresse
           </button>
         </div>
-
-        {showAddAddressModal && (
-          <AddAddressModal onClose={() => setShowAddAddressModal(false)} onSuccess={handleAddressAdded} />
-        )}
+        {showAddAddressModal && <AddAddressModal onClose={() => setShowAddAddressModal(false)} onSuccess={handleAddressAdded} />}
       </div>
     );
   }
@@ -546,58 +573,51 @@ const MapPage = () => {
           </button>
         </div>
 
-        {/* GPS position info when active */}
-        {trackingMode && userLocation && (
-          <div className="px-4 pb-2">
+        {/* ── BARRE D'ADRESSE ACTIVE ──────────────────────────────────────────── */}
+        {/* Quand le tracking GPS est actif, on affiche la position live à la place */}
+        {trackingMode && userLocation ? (
+          <div className="px-4 pb-2.5">
             <div className="bg-green-50 rounded-xl px-3 py-2 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              <p className="text-xs text-green-700 font-medium">
-                L'app suit votre position · {userLocation.latitude.toFixed(4)}°, {userLocation.longitude.toFixed(4)}°
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse flex-shrink-0" />
+              <p className="text-xs text-green-700 font-medium truncate">
+                Suivi en direct · {userLocation.latitude.toFixed(4)}°, {userLocation.longitude.toFixed(4)}°
               </p>
             </div>
           </div>
+        ) : (
+          <ActiveAddressBar
+            address={activeAddress}
+            trackingMode={trackingMode}
+            onPress={() => setShowAddressDrawer(true)}
+          />
         )}
       </div>
 
       {/* ── SCROLLABLE CONTENT ── */}
       <div className="px-4 py-3 space-y-3 pb-24">
 
-        {/* Auto-stop notification */}
         {showAutoStopNotification && autoStopReason && (
-          <TrackingNotification
-            reason={autoStopReason}
-            onClose={() => setShowAutoStopNotification(false)}
-            onReactivate={handleReactivateTracking}
-          />
+          <TrackingNotification reason={autoStopReason} onClose={() => setShowAutoStopNotification(false)} onReactivate={handleReactivateTracking} />
         )}
 
-        {/* ✅ Toast onboarding GPS — affiché une seule fois au premier appui */}
         {showGpsOnboarding && (
           <div className="bg-green-600 text-white rounded-2xl p-4 flex items-start gap-3 shadow-lg">
             <div className="text-2xl flex-shrink-0">📍</div>
             <div className="flex-1">
               <p className="font-bold text-sm mb-1">L'app vous suit maintenant !</p>
               <p className="text-xs text-green-100 leading-relaxed">
-                Tant que ce mode est actif, les revendeurs affichés sont ceux 
-                autour de <strong>votre position actuelle</strong>, pas votre adresse enregistrée. 
-                Appuyez à nouveau sur le bouton pour revenir à votre adresse.
+                Les revendeurs affichés sont ceux autour de <strong>votre position actuelle</strong>, pas votre adresse enregistrée. Appuyez à nouveau sur le bouton pour revenir à votre adresse.
               </p>
             </div>
-            <button
-              onClick={() => setShowGpsOnboarding(false)}
-              className="flex-shrink-0 p-1 hover:bg-green-500 rounded-lg transition-colors"
-            >
+            <button onClick={() => setShowGpsOnboarding(false)} className="flex-shrink-0 p-1 hover:bg-green-500 rounded-lg transition-colors">
               <X className="h-4 w-4" />
             </button>
           </div>
         )}
 
-        {/* Alert banner */}
-        {alert && (
-          <Alert type={alert.type} title={alert.title} message={alert.message} onClose={() => setAlert(null)} />
-        )}
+        {alert && <Alert type={alert.type} title={alert.title} message={alert.message} onClose={() => setAlert(null)} />}
 
-        {/* ── ACCESS STATUS CARD ── */}
+        {/* Access status cards */}
         {accessStatus.accessType === 'free' && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center gap-3">
             <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -650,35 +670,24 @@ const MapPage = () => {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => navigate('/client/access/purchase')}
-                className="flex-shrink-0 bg-amber-500 text-white text-xs font-bold py-2 px-3 rounded-xl active:scale-95 transition-transform"
-              >
+              <button onClick={() => navigate('/client/access/purchase')} className="flex-shrink-0 bg-amber-500 text-white text-xs font-bold py-2 px-3 rounded-xl active:scale-95 transition-transform">
                 Acheter
               </button>
             </div>
           </div>
         )}
 
-        {/* ── FILTERS ── */}
-        <SearchFilters
-          onApplyFilters={handleApplyFilters}
-          initialFilters={filters}
-          maxRadius={MAX_DISTANCE_KM}
-          accessType={accessStatus.accessType}
-          hasAccess={accessStatus.hasAccess}
-        />
+        {/* Filters */}
+        <SearchFilters onApplyFilters={handleApplyFilters} initialFilters={filters} maxRadius={MAX_DISTANCE_KM} accessType={accessStatus.accessType} hasAccess={accessStatus.hasAccess} />
 
-        {/* ── SELLERS LIST ── */}
+        {/* Sellers list */}
         {filteredSellers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-6">
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
               <MapPin className="h-8 w-8 text-gray-400" />
             </div>
             <h3 className="text-base font-bold text-gray-700 mb-1">Aucun revendeur trouvé</h3>
-            <p className="text-sm text-gray-400 text-center leading-relaxed">
-              Aucun revendeur dans votre zone.<br />Modifiez vos critères de recherche.
-            </p>
+            <p className="text-sm text-gray-400 text-center leading-relaxed">Aucun revendeur dans votre zone.<br />Modifiez vos critères de recherche.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -698,44 +707,38 @@ const MapPage = () => {
         )}
       </div>
 
-      {/* ── MODALS ── */}
+      {/* ── MODALS & DRAWERS ── */}
+
+      {/* Drawer sélection rapide d'adresse */}
+      {showAddressDrawer && (
+        <AddressDrawer
+          addresses={addresses}
+          activeAddressId={activeAddressId || activeAddress?.id}
+          onSelect={handleSelectAddress}
+          onClose={() => setShowAddressDrawer(false)}
+          onAddNew={() => setShowAddAddressModal(true)}
+        />
+      )}
 
       {/* Access purchase modal */}
       {showAccessModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAccessModal(false)} />
-
-          {/* Sheet / Dialog */}
-          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up">
-            {/* Drag handle (mobile) */}
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
             <div className="flex justify-center pt-3 pb-1 sm:hidden">
               <div className="w-10 h-1 bg-gray-200 rounded-full" />
             </div>
-
-            {/* Close btn */}
-            <button
-              onClick={() => setShowAccessModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
-            >
+            <button onClick={() => setShowAccessModal(false)} className="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
               <X className="h-4 w-4" />
             </button>
-
             <div className="px-6 pb-8 pt-4">
-              {/* Icon */}
               <div className="flex justify-center mb-5">
                 <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center">
                   <Lock className="h-8 w-8 text-amber-600" />
                 </div>
               </div>
-
-              {/* Text */}
               <h3 className="text-xl font-bold text-gray-900 text-center mb-1">Accès requis</h3>
-              <p className="text-sm text-gray-500 text-center mb-5">
-                Pour appeler, naviguer ou commander, activez l'accès 24h.
-              </p>
-
-              {/* Price box */}
+              <p className="text-sm text-gray-500 text-center mb-5">Pour appeler, naviguer ou commander, activez l'accès 24h.</p>
               {accessStatus.price && (
                 <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 mb-5 text-center">
                   <p className="text-xs text-amber-600 mb-1 font-medium uppercase tracking-wide">Accès complet</p>
@@ -745,8 +748,6 @@ const MapPage = () => {
                   <p className="text-xs text-amber-600">valable {accessStatus.duration}h</p>
                 </div>
               )}
-
-              {/* Features */}
               <div className="space-y-2 mb-5">
                 {['Numéros de téléphone visibles', 'Itinéraires GPS', 'Commandes en ligne'].map((feature) => (
                   <div key={feature} className="flex items-center gap-2.5">
@@ -759,19 +760,11 @@ const MapPage = () => {
                   </div>
                 ))}
               </div>
-
-              {/* CTA */}
-              <button
-                onClick={handleBuyAccess}
-                className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-200 mb-3"
-              >
+              <button onClick={handleBuyAccess} className="w-full bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-200 mb-3">
                 <CreditCard className="h-5 w-5" />
                 Acheter l'accès maintenant
               </button>
-              <button
-                onClick={() => setShowAccessModal(false)}
-                className="w-full text-gray-400 text-sm py-2 active:text-gray-600 transition-colors"
-              >
+              <button onClick={() => setShowAccessModal(false)} className="w-full text-gray-400 text-sm py-2 active:text-gray-600 transition-colors">
                 Plus tard
               </button>
             </div>
@@ -779,19 +772,12 @@ const MapPage = () => {
         </div>
       )}
 
-      {/* Seller details modal */}
+      {/* Seller details */}
       {selectedSeller && (
-        <SellerDetailsModal
-          seller={selectedSeller}
-          onClose={() => setSelectedSeller(null)}
-          onOrder={handleOrder}
-          onNavigate={handleNavigate}
-          hasAccess={accessStatus.hasAccess}
-          onAccessRequired={handleAccessRequired}
-        />
+        <SellerDetailsModal seller={selectedSeller} onClose={() => setSelectedSeller(null)} onOrder={handleOrder} onNavigate={handleNavigate} hasAccess={accessStatus.hasAccess} onAccessRequired={handleAccessRequired} />
       )}
 
-      {/* Add address modal */}
+      {/* Add address */}
       {showAddAddressModal && (
         <AddAddressModal onClose={() => setShowAddAddressModal(false)} onSuccess={handleAddressAdded} />
       )}
