@@ -1,13 +1,14 @@
 // ==========================================
 // FICHIER: src/components/common/LogoImage.jsx
-// Composant logo avec skeleton de chargement et fallback texte
-// Résout le problème d'affichage sur connexion faible
+// Composant logo avec skeleton de chargement et fallback SVG inline
+// ✅ FIX HORS LIGNE: fallback SVG flamme FasoGaz (zéro réseau requis)
+//    Remplace le fallback texte "FG" par le même SVG que SplashScreen
 // ==========================================
 import React, { useState } from 'react';
 
 /**
  * FasoGazWordmark — logo textuel SVG inline, chargé instantanément (0 réseau).
- * Utilisé comme fallback si l'image ne charge pas.
+ * Utilisé à côté du logo image dans la navbar, login, etc.
  */
 export const FasoGazWordmark = ({ className = '', textSize = 'text-xl' }) => (
   <span className={`font-extrabold tracking-wide ${textSize} ${className}`}>
@@ -22,17 +23,79 @@ export const FasoGazWordmark = ({ className = '', textSize = 'text-xl' }) => (
 );
 
 /**
+ * LogoFallbackSVG — flamme FasoGaz entièrement inline.
+ * Identique au fallback du SplashScreen pour une cohérence visuelle parfaite.
+ * Aucun réseau, aucun cache requis — toujours disponible.
+ */
+const LogoFallbackSVG = () => (
+  <svg
+    viewBox="0 0 120 120"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ width: '100%', height: '100%' }}
+    aria-hidden="true"
+  >
+    {/* Fond circulaire */}
+    <circle cx="60" cy="60" r="58" fill="#1a0000" />
+
+    {/* Flamme principale */}
+    <path
+      d="M60 20 C60 20 42 38 42 58 C42 72 50 82 60 86
+         C70 82 78 72 78 58 C78 38 60 20 60 20Z"
+      fill="url(#lgFlameMain)"
+    />
+    {/* Flamme intérieure */}
+    <path
+      d="M60 38 C60 38 50 50 50 62 C50 70 54 76 60 78
+         C66 76 70 70 70 62 C70 50 60 38 60 38Z"
+      fill="url(#lgFlameInner)"
+    />
+    {/* Lettre G */}
+    <text
+      x="60"
+      y="74"
+      textAnchor="middle"
+      fontFamily="'Bebas Neue', 'Arial Black', sans-serif"
+      fontWeight="900"
+      fontSize="28"
+      fill="#fff"
+      opacity="0.9"
+    >
+      G
+    </text>
+    {/* Socle */}
+    <rect x="44" y="86" width="32" height="5" rx="2.5" fill="url(#lgBase)" opacity="0.8" />
+
+    <defs>
+      <linearGradient id="lgFlameMain" x1="60" y1="20" x2="60" y2="86" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stopColor="#fbbf24" />
+        <stop offset="50%"  stopColor="#f97316" />
+        <stop offset="100%" stopColor="#dc2626" />
+      </linearGradient>
+      <linearGradient id="lgFlameInner" x1="60" y1="38" x2="60" y2="78" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stopColor="#fff"    stopOpacity="0.9" />
+        <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.6" />
+      </linearGradient>
+      <linearGradient id="lgBase" x1="44" y1="0" x2="76" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stopColor="#f97316" stopOpacity="0" />
+        <stop offset="50%"  stopColor="#fbbf24" />
+        <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+/**
  * LogoImage — <img> avec 3 états :
  *  - loading  → skeleton animé (shimmer)
  *  - loaded   → image visible avec fade-in
- *  - error    → initiales colorées sur fond sombre
+ *  - error    → flamme SVG FasoGaz inline (fonctionne hors ligne)
  *
  * Props :
  *  - src          : chemin de l'image
  *  - alt          : texte alternatif
  *  - className    : classes Tailwind pour l'image elle-même
  *  - wrapperClass : classes du conteneur (taille, forme…)
- *  - fallbackText : 1-2 lettres affichées en cas d'erreur (défaut: "FG")
+ *  - fallbackText : conservé pour compatibilité API, non utilisé (SVG à la place)
  *  - skeletonClass: classes supplémentaires pour le skeleton
  */
 const LogoImage = ({
@@ -40,7 +103,7 @@ const LogoImage = ({
   alt = 'Logo',
   className = '',
   wrapperClass = '',
-  fallbackText = 'FG',
+  fallbackText = 'FG', // conservé pour ne pas casser les appels existants
   skeletonClass = '',
 }) => {
   const [status, setStatus] = useState('loading'); // 'loading' | 'loaded' | 'error'
@@ -61,15 +124,13 @@ const LogoImage = ({
         />
       )}
 
-      {/* ── Fallback initiales (visible si erreur de chargement) ── */}
+      {/* ── Fallback SVG inline (hors ligne, cache vide, 404) ── */}
       {status === 'error' && (
         <div
           aria-label={alt}
-          className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-br from-red-900 to-red-800 border border-red-700"
+          className="absolute inset-0 flex items-center justify-center rounded-lg overflow-hidden"
         >
-          <span className="font-extrabold text-white text-sm leading-none select-none">
-            {fallbackText.slice(0, 2).toUpperCase()}
-          </span>
+          <LogoFallbackSVG />
         </div>
       )}
 
@@ -84,7 +145,7 @@ const LogoImage = ({
         onError={() => setStatus('error')}
       />
 
-      {/* Keyframe injecté une seule fois via style global */}
+      {/* Keyframe shimmer injecté une seule fois */}
       <style>{`
         @keyframes fg-shimmer {
           0%   { background-position: 200% 0; }

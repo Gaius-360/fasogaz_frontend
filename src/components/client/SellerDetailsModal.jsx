@@ -4,6 +4,7 @@
 // ✅ FIX MOBILE: CSS Grid 3 rows, mb-[60px] sm:mb-0
 // ✅ NOUVEAU: Avis anonymisés (prénom + initiale seulement)
 // ✅ NOUVEAU: Filtre de contenu inapproprié sur les commentaires
+// ✅ NOUVEAU: Commande bloquée si le dépôt est fermé ou horaires non renseignés
 // ==========================================
 import React, { useState, useEffect } from 'react';
 import {
@@ -17,14 +18,8 @@ import { useNavigate } from 'react-router-dom';
 
 // ============================================================
 // FILTRE DE CONTENU INAPPROPRIÉ
-// Liste de mots/expressions interdits sur la plateforme.
-// Couvre : insultes courantes en français, wolof, mooré, dioula,
-// termes discriminatoires, sexuels explicites.
-// Le filtre détecte aussi les contournements courants (leetspeak,
-// espaces intercalés, répétitions de lettres).
 // ============================================================
 const FORBIDDEN_PATTERNS = [
-  // ── Insultes françaises ──────────────────────────────────
   /c[o0]nn?[a@e]/i,
   /[s$][a@]l[o0]p/i,
   /enc[u\*]l/i,
@@ -50,22 +45,14 @@ const FORBIDDEN_PATTERNS = [
   /ferme\s*(ta|la)\s*(gueule|bouche)/i,
   /tg\b/i,
   /fils?\s*(de\s*)?(put|sal|con)/i,
-
-  // ── Insultes / mots vulgaires dioula / bambara ───────────
-  /wolo\s*so/i,           // bâtard (dioula)
-  /dogo\s*kono/i,         // gros mot bambara
+  /wolo\s*so/i,
+  /dogo\s*kono/i,
   /basi\s*kono/i,
-
-  // ── Insultes / mots vulgaires mooré ─────────────────────
-  /koglere/i,             // imbécile / idiot
+  /koglere/i,
   /yell[e3]\s*boe/i,
-
-  // ── Insultes / mots vulgaires wolof ─────────────────────
   /degeum/i,
-  /nit\s*ku\s*bon/i,      // mauvaise personne
-  /doff\s*la/i,           // tu es fou (insultant)
-
-  // ── Contenu sexuel explicite ──────────────────────────────
+  /nit\s*ku\s*bon/i,
+  /doff\s*la/i,
   /porn/i,
   /xxx/i,
   /sexe?\s*explicit/i,
@@ -73,32 +60,17 @@ const FORBIDDEN_PATTERNS = [
   /\bvagin\b/i,
   /\banus\b/i,
   /\bcul\b/i,
-
-  // ── Menaces / incitation à la violence ───────────────────
   /je\s*(vais|veux)\s*(te\s*)?(tuer|buter|crever|massacrer)/i,
   /mort\s*(aux?|à)/i,
   /crève/i,
 ];
 
-/**
- * Normalise une chaîne pour détecter les contournements leetspeak.
- * Ex: "c0nn@rd" → "connard"
- */
 const normalizeLeet = (str) =>
   str
-    .replace(/[0]/g, 'o')
-    .replace(/[1]/g, 'i')
-    .replace(/[3]/g, 'e')
-    .replace(/[4]/g, 'a')
-    .replace(/[@]/g, 'a')
-    .replace(/[$]/g, 's')
-    .replace(/[+]/g, 't')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/[0]/g, 'o').replace(/[1]/g, 'i').replace(/[3]/g, 'e')
+    .replace(/[4]/g, 'a').replace(/[@]/g, 'a').replace(/[$]/g, 's')
+    .replace(/[+]/g, 't').replace(/\s+/g, ' ').trim();
 
-/**
- * Retourne true si le texte contient du contenu inapproprié.
- */
 export const containsInappropriateContent = (text) => {
   if (!text || typeof text !== 'string') return false;
   const normalized = normalizeLeet(text);
@@ -107,11 +79,6 @@ export const containsInappropriateContent = (text) => {
   );
 };
 
-/**
- * Remplace les mots interdits par des astérisques dans un texte.
- * Utilisé pour afficher des commentaires anciens qui auraient passé
- * la modération avant l'ajout du filtre.
- */
 export const sanitizeText = (text) => {
   if (!text || typeof text !== 'string') return text;
   let result = text;
@@ -123,18 +90,39 @@ export const sanitizeText = (text) => {
 
 // ============================================================
 // ANONYMISATION DES AVIS
-// Affiche uniquement le prénom + initiale du nom de famille.
-// Ex: "Aminata Ouédraogo" → "Aminata O."
 // ============================================================
 const anonymizeReviewer = (customer) => {
   if (!customer) return 'Client anonyme';
-  const firstName = customer.firstName || '';
+  const firstName   = customer.firstName || '';
   const lastInitial = customer.lastName
     ? customer.lastName.charAt(0).toUpperCase() + '.'
     : '';
   return [firstName, lastInitial].filter(Boolean).join(' ') || 'Client';
 };
 
+// ============================================================
+// HELPER : statut ouverture
+// Retourne : true (ouvert) | false (fermé) | null (inconnu)
+// ============================================================
+const computeOpenStatus = (openingHours) => {
+  if (!openingHours) return null;
+  try {
+    const hours = typeof openingHours === 'string'
+      ? JSON.parse(openingHours)
+      : openingHours;
+    if (hours.isOpen24_7) return true;
+    if (hours.isClosed)   return false;
+    const now      = new Date();
+    const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const dayKey   = dayNames[now.getDay()];
+    const day      = hours.schedule?.[dayKey];
+    if (!day || !day.enabled) return false;
+    const cur      = now.getHours() * 60 + now.getMinutes();
+    const [oh, om] = (day.open  || '08:00').split(':').map(Number);
+    const [ch, cm] = (day.close || '20:00').split(':').map(Number);
+    return cur >= oh * 60 + om && cur <= ch * 60 + cm;
+  } catch { return null; }
+};
 
 // ============================================================
 // COMPOSANT PRINCIPAL
@@ -156,9 +144,35 @@ const SellerDetailsModal = ({
   const [activeTab, setActiveTab]             = useState('produits');
   const [reviews, setReviews]                 = useState([]);
   const [loadingReviews, setLoadingReviews]   = useState(false);
-  // ✅ FIX: compteur local dérivé des avis chargés — évite de dépendre de
-  // reviewCount qui peut être obsolète si un avis vient d'être soumis.
+
   const reviewCount = reviews.length > 0 ? reviews.length : (seller.reviewCount || 0);
+
+  // ── Statut ouverture calculé une seule fois ────────────────
+  // null  → horaires non renseignés
+  // true  → ouvert
+  // false → fermé
+  const open              = computeOpenStatus(seller?.openingHours);
+  const hoursNotDefined   = open === null;
+  const isClosed          = open === false;
+
+  // ── Checks métier ──────────────────────────────────────────
+  const deliveryNotConfigured = !seller?.deliveryAvailable;
+
+  // ✅ La commande est impossible si :
+  //   1. La livraison n'est pas configurée
+  //   2. Le dépôt est fermé (open === false)
+  //   3. Les horaires ne sont pas renseignés (open === null)
+  //      → on ne peut pas savoir s'il est ouvert, on bloque par sécurité
+  const cannotOrder = deliveryNotConfigured || isClosed || hoursNotDefined;
+
+  // Message affiché dans le footer selon la raison du blocage
+  const orderBlockReason = deliveryNotConfigured
+    ? 'delivery'
+    : isClosed
+      ? 'closed'
+      : hoursNotDefined
+        ? 'unknown_hours'
+        : null;
 
   useEffect(() => {
     if (seller?.id) loadProducts();
@@ -228,36 +242,9 @@ const SellerDetailsModal = ({
   const total       = subtotal + deliveryFee;
   const itemCount   = selectedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
-  // ── Checks métier ──────────────────────────────────────────
-  const deliveryNotConfigured = !seller?.deliveryAvailable;
-  const hoursNotDefined       = !seller?.openingHours;
-
-  // ── Statut ouvert/fermé ────────────────────────────────────
-  const isOpenNow = () => {
-    if (!seller?.openingHours) return null;
-    try {
-      const hours = typeof seller.openingHours === 'string'
-        ? JSON.parse(seller.openingHours)
-        : seller.openingHours;
-      if (hours.isOpen24_7) return true;
-      if (hours.isClosed)   return false;
-      const now      = new Date();
-      const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-      const dayKey   = dayNames[now.getDay()];
-      const day      = hours.schedule?.[dayKey];
-      if (!day || !day.enabled) return false;
-      const cur      = now.getHours() * 60 + now.getMinutes();
-      const [oh, om] = (day.open  || '08:00').split(':').map(Number);
-      const [ch, cm] = (day.close || '20:00').split(':').map(Number);
-      return cur >= oh * 60 + om && cur <= ch * 60 + cm;
-    } catch { return null; }
-  };
-
-  const open = isOpenNow();
-
   // ── Commander ──────────────────────────────────────────────
   const handleOrder = () => {
-    if (selectedProducts.length === 0 || deliveryNotConfigured) return;
+    if (selectedProducts.length === 0 || cannotOrder) return;
     if (onOrder) {
       onOrder(seller, selectedProducts);
     } else {
@@ -299,7 +286,6 @@ const SellerDetailsModal = ({
         <Clock className="h-3 w-3" />Horaires non renseignés
       </span>
     );
-    if (open === null) return null;
     return (
       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
         open ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -307,6 +293,62 @@ const SellerDetailsModal = ({
         {open ? '🟢 Ouvert' : '🔴 Fermé'}
       </span>
     );
+  };
+
+  // ── Footer commande : message selon raison du blocage ─────
+  const OrderBlockedBanner = () => {
+    if (orderBlockReason === 'delivery') {
+      return (
+        <div className="flex items-center gap-3 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+          <AlertTriangle className="h-5 w-5 text-orange-500 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-orange-800">Commande impossible</p>
+            <p className="text-xs text-orange-700 mt-0.5">
+              Ce revendeur n'a pas activé la livraison.
+              {seller.phone && (
+                <> Contactez-le au <a href={`tel:${seller.phone}`} className="font-bold underline">{seller.phone}</a>.</>
+              )}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (orderBlockReason === 'closed') {
+      return (
+        <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+          <Clock className="h-5 w-5 text-red-500 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-red-800">Dépôt actuellement fermé</p>
+            <p className="text-xs text-red-700 mt-0.5">
+              Les commandes ne sont acceptées que pendant les heures d'ouverture.
+              {seller.phone && (
+                <> Appelez le <a href={`tel:${seller.phone}`} className="font-bold underline">{seller.phone}</a> pour plus d'infos.</>
+              )}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (orderBlockReason === 'unknown_hours') {
+      return (
+        <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+          <Clock className="h-5 w-5 text-gray-400 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-700">Horaires non renseignés</p>
+            <p className="text-xs text-gray-600 mt-0.5">
+              Impossible de confirmer la disponibilité du dépôt.
+              {seller.phone && (
+                <> Appelez le <a href={`tel:${seller.phone}`} className="font-bold underline">{seller.phone}</a> avant de commander.</>
+              )}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   // ══════════════════════════════════════════════════════════
@@ -382,7 +424,7 @@ const SellerDetailsModal = ({
         </div>
 
         {/* ── Bannières avertissement ── */}
-        {(deliveryNotConfigured || hoursNotDefined) && (
+        {(deliveryNotConfigured || hoursNotDefined || isClosed) && (
           <div className="border-b">
             {deliveryNotConfigured && (
               <div className="flex items-start gap-3 px-4 py-3 bg-orange-50 border-b border-orange-100">
@@ -393,12 +435,21 @@ const SellerDetailsModal = ({
                 </p>
               </div>
             )}
+            {isClosed && (
+              <div className="flex items-start gap-3 px-4 py-3 bg-red-50 border-b border-red-100">
+                <Clock className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-800">
+                  <span className="font-semibold">Dépôt fermé</span> — ce revendeur n'accepte pas
+                  de commandes en dehors de ses heures d'ouverture.
+                </p>
+              </div>
+            )}
             {hoursNotDefined && (
               <div className="flex items-start gap-3 px-4 py-3 bg-gray-50">
                 <Clock className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-gray-600">
                   <span className="font-semibold">Horaires non renseignés</span> — appelez le revendeur
-                  pour vérifier sa disponibilité.
+                  pour vérifier sa disponibilité avant de commander.
                 </p>
               </div>
             )}
@@ -449,7 +500,7 @@ const SellerDetailsModal = ({
                         key={product.id}
                         className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-colors ${
                           qty > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-200 bg-white'
-                        } ${outOfStock ? 'opacity-50' : ''}`}
+                        } ${outOfStock || cannotOrder ? 'opacity-50' : ''}`}
                       >
                         <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
                           {product.productImage ? (
@@ -480,13 +531,14 @@ const SellerDetailsModal = ({
                             )}
                           </div>
                         </div>
+                        {/* ✅ Contrôles désactivés si cannotOrder */}
                         {!outOfStock ? (
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <button
                               onClick={() => updateQuantity(product.id, -1)}
-                              disabled={qty === 0 || deliveryNotConfigured}
+                              disabled={qty === 0 || cannotOrder}
                               className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold transition-colors ${
-                                qty > 0 && !deliveryNotConfigured
+                                qty > 0 && !cannotOrder
                                   ? 'border-primary-600 text-primary-600 hover:bg-primary-50'
                                   : 'border-gray-200 text-gray-300'
                               }`}
@@ -500,9 +552,9 @@ const SellerDetailsModal = ({
                             </span>
                             <button
                               onClick={() => updateQuantity(product.id, +1)}
-                              disabled={qty >= product.quantity || deliveryNotConfigured}
+                              disabled={qty >= product.quantity || cannotOrder}
                               className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold transition-colors ${
-                                qty < product.quantity && !deliveryNotConfigured
+                                qty < product.quantity && !cannotOrder
                                   ? 'border-primary-600 bg-primary-600 text-white hover:bg-primary-700'
                                   : 'border-gray-200 text-gray-300'
                               }`}
@@ -521,12 +573,7 @@ const SellerDetailsModal = ({
             </div>
           )}
 
-          {/* ==========================================
-              TAB AVIS
-              ✅ Anonymisation : prénom + initiale du nom
-              ✅ Filtre contenu inapproprié sur le commentaire
-                 et la réponse du revendeur
-              ========================================== */}
+          {/* TAB AVIS */}
           {activeTab === 'avis' && (
             <div className="p-4">
               {loadingReviews ? (
@@ -541,26 +588,17 @@ const SellerDetailsModal = ({
               ) : (
                 <div className="space-y-3">
                   {reviews.map((review) => {
-                    // ── Nettoyage du commentaire ──────────────────────────
-                    const rawComment     = review.comment || '';
-                    const rawResponse    = review.sellerResponse || '';
-                    const isCommentDirty = containsInappropriateContent(rawComment);
+                    const rawComment      = review.comment || '';
+                    const rawResponse     = review.sellerResponse || '';
+                    const isCommentDirty  = containsInappropriateContent(rawComment);
                     const isResponseDirty = containsInappropriateContent(rawResponse);
-
-                    // Si le commentaire est entièrement inapproprié → masquer
-                    // (sanitize suffit si seuls quelques mots posent problème)
-                    const displayComment = isCommentDirty
-                      ? sanitizeText(rawComment)
-                      : rawComment;
-                    const displayResponse = isResponseDirty
-                      ? sanitizeText(rawResponse)
-                      : rawResponse;
+                    const displayComment  = isCommentDirty  ? sanitizeText(rawComment)  : rawComment;
+                    const displayResponse = isResponseDirty ? sanitizeText(rawResponse) : rawResponse;
 
                     return (
                       <div key={review.id} className="p-4 bg-gray-50 rounded-xl">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div>
-                            {/* ✅ Nom anonymisé : "Aminata O." */}
                             <p className="font-semibold text-sm text-gray-900">
                               {anonymizeReviewer(review.customer)}
                             </p>
@@ -571,12 +609,9 @@ const SellerDetailsModal = ({
                           {renderStars(review.rating)}
                         </div>
 
-                        {/* Commentaire (filtré) */}
                         {displayComment && (
                           <>
-                            <p className="text-sm text-gray-700 mb-2">
-                              "{displayComment}"
-                            </p>
+                            <p className="text-sm text-gray-700 mb-2">"{displayComment}"</p>
                             {isCommentDirty && (
                               <p className="text-[10px] text-orange-500 flex items-center gap-1 mb-1">
                                 <ShieldAlert className="h-3 w-3" />
@@ -586,12 +621,9 @@ const SellerDetailsModal = ({
                           </>
                         )}
 
-                        {/* Réponse du revendeur (filtrée) */}
                         {displayResponse && (
                           <div className="bg-white border border-gray-200 rounded-lg p-3 mt-2">
-                            <p className="text-xs font-semibold text-gray-500 mb-1">
-                              Réponse du revendeur
-                            </p>
+                            <p className="text-xs font-semibold text-gray-500 mb-1">Réponse du revendeur</p>
                             <p className="text-sm text-gray-700">{displayResponse}</p>
                             {isResponseDirty && (
                               <p className="text-[10px] text-orange-500 flex items-center gap-1 mt-1">
@@ -719,19 +751,8 @@ const SellerDetailsModal = ({
           className="border-t-2 border-neutral-100 bg-white p-4"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         >
-          {activeTab !== 'produits' ? null : deliveryNotConfigured ? (
-            <div className="flex items-center gap-3 p-3 bg-orange-50 border border-orange-200 rounded-xl">
-              <AlertTriangle className="h-5 w-5 text-orange-500 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-orange-800">Commande impossible</p>
-                <p className="text-xs text-orange-700 mt-0.5">
-                  Ce revendeur n'a pas activé la livraison.
-                  {seller.phone && (
-                    <> Contactez-le au <a href={`tel:${seller.phone}`} className="font-bold underline">{seller.phone}</a>.</>
-                  )}
-                </p>
-              </div>
-            </div>
+          {activeTab !== 'produits' ? null : cannotOrder ? (
+            <OrderBlockedBanner />
           ) : selectedProducts.length > 0 ? (
             <>
               <div className="flex justify-between items-center mb-3 text-sm">

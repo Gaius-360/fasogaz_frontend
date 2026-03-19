@@ -16,16 +16,113 @@ import { useEffect, useState } from "react";
  *   onFinish : () => void   — appelé quand l'animation se termine
  *   duration : number       — durée totale en ms (défaut 2800)
  */
+
+// ─────────────────────────────────────────────────────────────────
+// FALLBACK SVG — affiché si l'image PNG ne se charge pas (hors ligne,
+// cache vide, première installation). Entièrement inline → toujours
+// disponible sans réseau ni cache.
+// ─────────────────────────────────────────────────────────────────
+const LogoFallback = () => (
+  <svg
+    viewBox="0 0 120 120"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{
+      position: "absolute",
+      inset: "14px",
+      width: "calc(100% - 28px)",
+      height: "calc(100% - 28px)",
+      filter: "drop-shadow(0 0 14px rgba(220,38,38,.7))",
+    }}
+  >
+    {/* Fond circulaire */}
+    <circle cx="60" cy="60" r="58" fill="#1a0000" />
+
+    {/* Flamme principale */}
+    <path
+      d="M60 20 C60 20 42 38 42 58 C42 72 50 82 60 86
+         C70 82 78 72 78 58 C78 38 60 20 60 20Z"
+      fill="url(#flameMain)"
+    />
+    {/* Flamme intérieure */}
+    <path
+      d="M60 38 C60 38 50 50 50 62 C50 70 54 76 60 78
+         C66 76 70 70 70 62 C70 50 60 38 60 38Z"
+      fill="url(#flameInner)"
+    />
+    {/* Lettre G stylisée */}
+    <text
+      x="60"
+      y="74"
+      textAnchor="middle"
+      fontFamily="'Bebas Neue', 'Arial Black', sans-serif"
+      fontWeight="900"
+      fontSize="28"
+      fill="#fff"
+      opacity="0.9"
+    >
+      G
+    </text>
+
+    {/* Socle / base */}
+    <rect x="44" y="86" width="32" height="5" rx="2.5" fill="url(#baseGrad)" opacity="0.8" />
+
+    <defs>
+      <linearGradient id="flameMain" x1="60" y1="20" x2="60" y2="86" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stopColor="#fbbf24" />
+        <stop offset="50%"  stopColor="#f97316" />
+        <stop offset="100%" stopColor="#dc2626" />
+      </linearGradient>
+      <linearGradient id="flameInner" x1="60" y1="38" x2="60" y2="78" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stopColor="#fff"    stopOpacity="0.9" />
+        <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.6" />
+      </linearGradient>
+      <linearGradient id="baseGrad" x1="44" y1="0" x2="76" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stopColor="#f97316" stopOpacity="0" />
+        <stop offset="50%"  stopColor="#fbbf24" />
+        <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+// ─────────────────────────────────────────────────────────────────
+// LogoImage — tente de charger le PNG ; bascule sur SVG si erreur
+// ─────────────────────────────────────────────────────────────────
+const LogoImage = ({ src }) => {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) return <LogoFallback />;
+
+  return (
+    <img
+      className="fg-logo"
+      src={src}
+      alt="FasoGaz logo"
+      onError={() => setFailed(true)}
+      // Si l'image met plus de 4s à charger (réseau lent) → fallback
+      // Le splash dure ~2.8s donc on bascule rapidement
+      style={{
+        position: "absolute",
+        inset: "14px",
+        borderRadius: "50%",
+        objectFit: "contain",
+        padding: "10px",
+        filter: "drop-shadow(0 0 14px rgba(220,38,38,.7))",
+      }}
+    />
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// COMPOSANT PRINCIPAL
+// ─────────────────────────────────────────────────────────────────
 export default function SplashScreen({ onFinish, duration = 2800 }) {
   const [phase, setPhase] = useState("enter"); // enter | hold | exit
 
   useEffect(() => {
-    // Phase 1 : entrée (800ms) → hold
-    const t1 = setTimeout(() => setPhase("hold"), 800);
-    // Phase 2 : exit commence 600ms avant la fin
-    const t2 = setTimeout(() => setPhase("exit"), duration - 600);
-    // Phase 3 : démonte le splash
-    const t3 = setTimeout(() => onFinish?.(), duration);
+    const t1 = setTimeout(() => setPhase("hold"),  800);
+    const t2 = setTimeout(() => setPhase("exit"),  duration - 600);
+    const t3 = setTimeout(() => onFinish?.(),       duration);
     return () => [t1, t2, t3].forEach(clearTimeout);
   }, [duration, onFinish]);
 
@@ -102,7 +199,7 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
           from { opacity: 0; transform: translateY(28px) scale(.85); }
           to   { opacity: 1; transform: translateY(0)    scale(1);   }
         }
-        .fg-ring svg {
+        .fg-ring > svg:first-child {
           position: absolute;
           inset: 0;
           width: 100%;
@@ -110,16 +207,6 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
           animation: fg-spin 6s linear infinite;
         }
         @keyframes fg-spin { to { transform: rotate(360deg); } }
-
-        /* ── LOGO IMG ────────────────────────── */
-        .fg-logo {
-          position: absolute;
-          inset: 14px;
-          border-radius: 50%;
-          object-fit: contain;
-          padding: 10px;
-          filter: drop-shadow(0 0 14px rgba(220,38,38,.7));
-        }
 
         /* ── TEXT BLOCK ──────────────────────── */
         .fg-text {
@@ -178,7 +265,6 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
           height: 100%;
           border-radius: 99px;
           background: linear-gradient(90deg, var(--ember), var(--gold));
-          animation: fg-load ${props => props.duration - 400}ms cubic-bezier(.4,0,.2,1) 0.3s both;
           transform-origin: left;
         }
         @keyframes fg-load {
@@ -208,7 +294,6 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
         .fg-particle {
           position: absolute;
           border-radius: 50%;
-          background: var(--ember);
           animation: fg-float linear infinite;
           opacity: 0;
         }
@@ -221,6 +306,7 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
       `}</style>
 
       <div className={`fg-splash${phase === "exit" ? " exit" : ""}`}>
+
         {/* Glow de fond */}
         <div className="fg-glow" />
 
@@ -231,13 +317,13 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
               key={i}
               className="fg-particle"
               style={{
-                width: `${3 + Math.random() * 4}px`,
-                height: `${3 + Math.random() * 4}px`,
-                left: `${20 + Math.random() * 60}%`,
-                bottom: `${30 + Math.random() * 20}%`,
+                width:             `${3 + Math.random() * 4}px`,
+                height:            `${3 + Math.random() * 4}px`,
+                left:              `${20 + Math.random() * 60}%`,
+                bottom:            `${30 + Math.random() * 20}%`,
                 animationDuration: `${2 + Math.random() * 2.5}s`,
-                animationDelay: `${Math.random() * 2}s`,
-                background: Math.random() > 0.5 ? "#f97316" : "#fbbf24",
+                animationDelay:    `${Math.random() * 2}s`,
+                background:        Math.random() > 0.5 ? "#f97316" : "#fbbf24",
               }}
             />
           ))}
@@ -247,21 +333,24 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
         <div className="fg-ring">
           {/* Anneau SVG rotatif */}
           <svg viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="74" cy="74" r="70" stroke="url(#ringGrad)" strokeWidth="2.5" strokeDasharray="6 10" strokeLinecap="round"/>
+            <circle
+              cx="74" cy="74" r="70"
+              stroke="url(#ringGrad)"
+              strokeWidth="2.5"
+              strokeDasharray="6 10"
+              strokeLinecap="round"
+            />
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="148" y2="148" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#f97316"/>
-                <stop offset="50%" stopColor="#fbbf24"/>
-                <stop offset="100%" stopColor="#f97316" stopOpacity="0"/>
+                <stop offset="0%"   stopColor="#f97316" />
+                <stop offset="50%"  stopColor="#fbbf24" />
+                <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
               </linearGradient>
             </defs>
           </svg>
-          {/* Logo */}
-          <img
-            className="fg-logo"
-            src="/icons/icon-192x192.png"
-            alt="FasoGaz logo"
-          />
+
+          {/* ✅ Logo avec fallback SVG inline si hors ligne ou cache vide */}
+          <LogoImage src="/icons/icon-192x192.png" />
         </div>
 
         {/* Nom + slogan */}
