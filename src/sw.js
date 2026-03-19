@@ -1,38 +1,112 @@
 // ==========================================
 // FICHIER: src/sw.js
-// Service Worker — Précache Workbox + Push Notifications
+// Service Worker — Précache Workbox + Stratégies cache + Push Notifications
+// ✅ FUSION: stratégies CacheFirst/NetworkFirst ajoutées pour offline complet
+//    (icônes, assets, API, fonts) sans toucher à la logique Push existante
 // ==========================================
-import { precacheAndRoute } from 'workbox-precaching'
 
-// Vite injecte ici automatiquement la liste des assets au build
+import { clientsClaim }                          from 'workbox-core'
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
+import { registerRoute }                          from 'workbox-routing'
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies'
+import { ExpirationPlugin }                       from 'workbox-expiration'
+import { CacheableResponsePlugin }                from 'workbox-cacheable-response'
+
+// ─────────────────────────────────────────────────────────────
+// PRÉCACHE
+// __WB_MANIFEST est injecté par Vite-PWA à la compilation.
+// Contient tous les fichiers matchés par injectManifest.globPatterns,
+// dont icons/*.png et logo_gazbf.png → disponibles hors ligne dès
+// la première installation, sans navigation préalable.
+// ─────────────────────────────────────────────────────────────
 precacheAndRoute(self.__WB_MANIFEST || [])
+cleanupOutdatedCaches()
 
 // ── Activation immédiate sans attendre l'ancienne version ────
-self.addEventListener('install', () => self.skipWaiting())
-self.addEventListener('activate', (e) => e.waitUntil(clients.claim()))
+self.skipWaiting()
+clientsClaim()
 
-// ── Navigation (index.html) : toujours réseau en priorité ────
-// Garantit que la dernière version du HTML est chargée (animations fraîches)
+// ─────────────────────────────────────────────────────────────
+// NAVIGATION SPA
+// NetworkFirst : tente le réseau d'abord pour avoir la dernière
+// version HTML, bascule sur le cache si hors ligne.
+// Conservé tel quel depuis la version originale.
+// ─────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Met à jour le cache avec la version fraîche
           const clone = response.clone()
           caches.open('fasogaz-html-v1').then((cache) => cache.put(event.request, clone))
           return response
         })
-        .catch(() => {
-          // Pas de réseau → fallback sur le cache
-          return caches.match(event.request).then((cached) => cached || caches.match('/'))
-        })
+        .catch(() =>
+          caches.match(event.request).then((cached) => cached || caches.match('/'))
+        )
     )
-    return
   }
 })
 
-// ── Message pour forcer le rechargement ─────────────────
+// ── Assets statiques : CacheFirst ────────────────────────────
+// JS, CSS, fonts, images (dont les icônes PNG du splash/logo).
+// Immutables grâce au hash Vite → cache 30 jours.
+registerRoute(
+  ({ request }) =>
+    request.destination === 'script' ||
+    request.destination === 'style'  ||
+    request.destination === 'font'   ||
+    request.destination === 'image',
+  new CacheFirst({
+    cacheName: 'fasogaz-assets-v1',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries:    120,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 jours
+      }),
+    ],
+  })
+)
+
+// ── API : NetworkFirst ────────────────────────────────────────
+// Fraîcheur prioritaire. Timeout 5s puis fallback cache.
+// Permet d'afficher les dernières commandes/produits vus hors ligne.
+registerRoute(
+  ({ url }) => url.pathname.startsWith('/api/'),
+  new NetworkFirst({
+    cacheName: 'fasogaz-api-v1',
+    networkTimeoutSeconds: 5,
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries:    60,
+        maxAgeSeconds: 24 * 60 * 60, // 1 jour
+      }),
+    ],
+  })
+)
+
+// ── Google Fonts : StaleWhileRevalidate ──────────────────────
+// Bebas Neue & Outfit — sert immédiatement depuis le cache,
+// rafraîchit en arrière-plan. Évite le FOUT hors ligne.
+registerRoute(
+  ({ url }) =>
+    url.origin === 'https://fonts.googleapis.com' ||
+    url.origin === 'https://fonts.gstatic.com',
+  new StaleWhileRevalidate({
+    cacheName: 'fasogaz-fonts-v1',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries:    20,
+        maxAgeSeconds: 365 * 24 * 60 * 60, // 1 an
+      }),
+    ],
+  })
+)
+
+// ── Message pour forcer le rechargement ──────────────────────
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
@@ -85,17 +159,15 @@ self.addEventListener('push', (event) => {
   const isUrgent = ['urgent', 'high'].includes(payload.priority)
 
   const options = {
-    body:  payload.message,
-    icon:  '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    body:    payload.message,
+    icon:    '/icons/icon-192x192.png',
+    badge:   '/icons/badge-72x72.png',
     vibrate: isUrgent ? [300, 100, 300, 100, 300] : [200, 100, 200],
 
     // ✅ FIX 1 : tag unique par notification pour éviter les collisions
-    // Un tag partagé (ex: 'fasogaz-notif') écrase la notif précédente
-    // et peut bloquer renotify sur certains Android
     tag: `${payload.type}-${payload.notificationId || Date.now()}`,
 
-    // ✅ FIX 2 : false car le tag est déjà unique — renotify n'a plus de sens
+    // ✅ FIX 2 : false car le tag est déjà unique
     renotify: false,
 
     requireInteraction: isUrgent,
@@ -109,10 +181,7 @@ self.addEventListener('push', (event) => {
     actions: getActions(payload.type),
   }
 
-  // ✅ FIX 3 : Promise explicite passée à waitUntil
-  // En background, le SW peut être tué avant que showNotification se resolve.
-  // On s'assure que la Promise est bien enchaînée pour que le navigateur
-  // maintienne le SW en vie le temps d'afficher la notification.
+  // ✅ FIX 3 : Promise explicite pour maintenir le SW en vie
   event.waitUntil(
     self.registration.showNotification(`${emoji} ${payload.title}`, options)
   )

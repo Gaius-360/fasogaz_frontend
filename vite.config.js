@@ -15,15 +15,12 @@ const copyRedirects = () => ({
     const src  = resolve(__dirname, 'public/_redirects')
     const dest = resolve(__dirname, 'dist/_redirects')
 
-    // ✅ S'assurer que dist/ existe avant d'écrire dedans
     mkdirSync(resolve(__dirname, 'dist'), { recursive: true })
 
     if (existsSync(src)) {
       copyFileSync(src, dest)
       console.log('✅ _redirects copié dans dist/')
     } else {
-      // ✅ Créer le fichier à la volée si absent
-      // Nécessaire pour React Router sur Render (SPA fallback)
       writeFileSync(dest, '/*    /index.html   200\n', 'utf-8')
       console.log('✅ _redirects créé automatiquement dans dist/')
     }
@@ -38,11 +35,18 @@ export default defineConfig(({ mode }) => {
       react(),
       copyRedirects(),
       VitePWA({
-        strategies:    'injectManifest',
-        srcDir:        'src',
-        filename:      'sw.js',
-        registerType:  'autoUpdate',
-        includeAssets: ['logo_gazbf.png', 'icons/*.png'],
+        strategies:   'injectManifest',
+        srcDir:       'src',
+        filename:     'sw.js',
+        registerType: 'autoUpdate',
+
+        // ✅ includeAssets : liste les fichiers à COPIER dans dist/ et à
+        //    inclure dans le manifest (favicons, apple-touch-icon…).
+        //    Ce n'est PAS ce qui garantit le précache — c'est globPatterns.
+        includeAssets: [
+          'logo_gazbf.png',
+          'icons/*.png',
+        ],
 
         manifest: {
           name:             'FasoGaz',
@@ -71,7 +75,24 @@ export default defineConfig(({ mode }) => {
         },
 
         injectManifest: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          // ✅ globPatterns : TOUT ce qui doit être précaché dès l'installation.
+          //    Les icônes PNG sont explicitement incluses ici — c'est ce qui
+          //    garantit que icon-192x192.png (logo splash) est disponible
+          //    hors ligne dès le premier lancement, sans attendre de navigation.
+          //
+          //    Avec 'injectManifest', Vite-PWA injecte __WB_MANIFEST__ dans
+          //    votre sw.js — ce tableau contient EXACTEMENT les fichiers
+          //    matchés par globPatterns. Si un fichier n'est pas ici, il
+          //    ne sera jamais précaché automatiquement.
+          globPatterns: [
+            '**/*.{js,css,html,ico,svg,woff2}', // assets JS/CSS/fonts
+            'icons/*.png',                       // ✅ toutes les icônes PWA
+            'logo_gazbf.png',                    // ✅ logo utilisé dans Login/Register
+          ],
+
+          // Taille max par fichier précaché (défaut 2 Mo — on monte à 5 Mo
+          // pour les splash screens haute résolution 512×512).
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
 
         devOptions: {
