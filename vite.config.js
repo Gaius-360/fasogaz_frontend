@@ -1,19 +1,31 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { resolve } from 'path'
-import { copyFileSync, existsSync } from 'fs'
+import { resolve, dirname } from 'path'
+import { copyFileSync, existsSync, writeFileSync, mkdirSync } from 'fs'
+import { fileURLToPath } from 'url'
+
+// ✅ FIX ESM : __dirname n'existe pas en ESM — il faut le reconstruire
+const __filename = fileURLToPath(import.meta.url)
+const __dirname  = dirname(__filename)
 
 const copyRedirects = () => ({
   name: 'copy-redirects',
   closeBundle() {
     const src  = resolve(__dirname, 'public/_redirects')
     const dest = resolve(__dirname, 'dist/_redirects')
+
+    // ✅ S'assurer que dist/ existe avant d'écrire dedans
+    mkdirSync(resolve(__dirname, 'dist'), { recursive: true })
+
     if (existsSync(src)) {
       copyFileSync(src, dest)
       console.log('✅ _redirects copié dans dist/')
     } else {
-      console.warn('⚠️  public/_redirects introuvable — routes SPA non configurées')
+      // ✅ Créer le fichier à la volée si absent
+      // Nécessaire pour React Router sur Render (SPA fallback)
+      writeFileSync(dest, '/*    /index.html   200\n', 'utf-8')
+      console.log('✅ _redirects créé automatiquement dans dist/')
     }
   }
 })
@@ -60,10 +72,6 @@ export default defineConfig(({ mode }) => {
 
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          // ✅ FIX CRITIQUE : injectionPoint: undefined supprimé
-          // Sans ça, Workbox ne peut pas injecter self.__WB_MANIFEST dans sw.js
-          // Le SW compilait mais plantait silencieusement en background sur mobile
-          // => aucun événement 'push' reçu hors de la plateforme
         },
 
         devOptions: {
@@ -73,8 +81,6 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-
-    // server: { host: true },
 
     define: {
       __API_URL__: JSON.stringify(env.VITE_API_URL),
