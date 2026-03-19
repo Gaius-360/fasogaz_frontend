@@ -1,11 +1,15 @@
 // ==========================================
 // FICHIER: src/api/apiSwitch.js
-// ✅ CORRECTIONS :
-//    1. adminAuth.login envoie { email, password } (plus username)
+// ✅ CORRECTIONS originales conservées :
+//    1. adminAuth.login envoie { email, password }
 //    2. Redirection 401 admin → bonne URL secrète
-//    3. ✅ FIX 429 : intercepteur userApi attache error.response?.status
-//       à l'objet rejeté → geocoding.js peut détecter le 429 et ouvrir
-//       le circuit breaker (sans ce fix, status === null, circuit jamais ouvert)
+//    3. FIX 429 : intercepteur attache error.response?.status
+// ✅ NOUVEAU: refresh token silencieux
+//    - Access token réduit à 15 min
+//    - 401 → tente POST /auth/refresh (cookie httpOnly envoyé auto)
+//    - Si refresh OK → relance la requête originale de façon transparente
+//    - File d'attente pour les requêtes parallèles pendant le refresh
+//    - withCredentials: true pour que les cookies soient transmis
 // ==========================================
 
 import axios from 'axios';
@@ -17,17 +21,39 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 // ============================================
 
 const userApi = axios.create({
-  baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
+  baseURL:         API_URL,
+  headers:         { 'Content-Type': 'application/json' },
+  withCredentials: true, // ✅ OBLIGATOIRE — envoie le cookie refresh_token à chaque requête
 });
 
 const adminApi = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
+  // Pas de withCredentials pour adminApi : les admins utilisent adminToken en localStorage
 });
 
 // ============================================
-// INTERCEPTEURS — TOKENS
+// ÉTAT DU REFRESH (partagé entre les requêtes)
+// ============================================
+
+/**
+ * Mutex simple pour éviter plusieurs appels /auth/refresh simultanés.
+ * Si 5 requêtes arrivent en parallèle avec un token expiré, une seule
+ * lance le refresh — les 4 autres attendent dans failedQueue puis
+ * sont relancées automatiquement avec le nouveau token.
+ */
+let isRefreshing = false;
+let failedQueue  = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(({ resolve, reject }) =>
+    error ? reject(error) : resolve(token)
+  );
+  failedQueue = [];
+};
+
+// ============================================
+// INTERCEPTEURS — TOKENS (requêtes sortantes)
 // ============================================
 
 userApi.interceptors.request.use(
@@ -51,32 +77,109 @@ adminApi.interceptors.request.use(
 );
 
 // ============================================
-// INTERCEPTEURS — ERREURS
+// INTERCEPTEURS — ERREURS (réponses entrantes)
 // ============================================
 
 userApi.interceptors.response.use(
+  // Succès → unwrap response.data (comportement original conservé)
   (response) => response.data,
-  (error) => {
-    if (error.response?.status === 401) {
-      const agentToken = localStorage.getItem('agentToken');
-      if (agentToken) {
-        localStorage.removeItem('agentToken');
-        localStorage.removeItem('agentUser');
-        window.location.href = '/secure/agent/7h3k9m2p5n8q/login';
-      } else {
+
+  async (error) => {
+    const originalRequest = error.config;
+
+    // ─────────────────────────────────────────
+    // CAS 401 : token expiré → tenter le refresh
+    // ─────────────────────────────────────────
+    if (error.response?.status === 401 && !originalRequest._retry) {
+
+      // Cas particulier : la route /auth/refresh elle-même a répondu 401
+      // → le refresh token est invalide/expiré → vraie déconnexion
+      if (originalRequest.url?.includes('/auth/refresh')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('agentToken');
+        localStorage.removeItem('agentUser');
         window.location.href = '/login';
+        return Promise.reject(error);
+      }
+
+      // Si un refresh est déjà en cours, mettre cette requête en file d'attente
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((newToken) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            return userApi(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      // Marquer : on est en train de rafraîchir
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // ✅ Le cookie refresh_token est transmis automatiquement (withCredentials: true)
+        const refreshResponse = await userApi.post('/auth/refresh');
+
+        // refreshResponse est déjà unwrappé (notre intercepteur succès retourne response.data)
+        const newToken = refreshResponse.token;
+
+        if (!newToken) throw new Error('Pas de token dans la réponse refresh');
+
+        // Sauvegarder le nouveau token
+        localStorage.setItem('token', newToken);
+
+        // Mettre à jour le header par défaut pour les prochaines requêtes
+        userApi.defaults.headers.common.Authorization = `Bearer ${newToken}`;
+
+        // Débloquer toutes les requêtes en attente
+        processQueue(null, newToken);
+
+        // Relancer la requête originale avec le nouveau token
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return userApi(originalRequest);
+
+      } catch (refreshError) {
+        // Refresh échoué → déconnecter proprement
+        processQueue(refreshError, null);
+
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('agentToken');
+        localStorage.removeItem('agentUser');
+
+        // Redirection selon le type de token présent avant déconnexion
+        const hadAgentToken = !!localStorage.getItem('agentToken');
+        window.location.href = hadAgentToken
+          ? '/secure/agent/7h3k9m2p5n8q/login'
+          : '/login';
+
+        return Promise.reject(refreshError);
+
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    // ✅ FIX 429 : l'intercepteur rejetait error.response?.data (le JSON du backend)
-    // sans y attacher le code HTTP. Du coup, dans geocoding.js, getStatusCode()
-    // recevait { success: false, message: '...' } sans .status → retournait null
-    // → if (status === 429) ne se déclenchait jamais → circuit breaker aveugle
-    // → appels continuaient en boucle malgré le 429.
-    //
-    // Fix : on enrichit l'objet rejeté avec le status HTTP avant de le propager.
+    // ─────────────────────────────────────────
+    // CAS 401 sur une route sans retry possible
+    // (ex: _retry déjà true → boucle évitée)
+    // ─────────────────────────────────────────
+    if (error.response?.status === 401 && originalRequest._retry) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
+    // ─────────────────────────────────────────
+    // ✅ FIX 429 (conservé de la version originale)
+    // Enrichit l'objet rejeté avec le status HTTP
+    // pour que geocoding.js puisse détecter le 429
+    // et ouvrir le circuit breaker correctement.
+    // ─────────────────────────────────────────
     const enrichedError = error.response?.data || error;
     enrichedError.status = error.response?.status ?? enrichedError.status ?? null;
 
@@ -90,7 +193,7 @@ adminApi.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
-      // ✅ CORRECTION : bonne URL secrète (était '/admin/login')
+      // ✅ CORRECTION originale conservée : bonne URL secrète
       window.location.href = '/secure/admin/3k9f2j8h4n7m/login';
     }
     return Promise.reject(error.response?.data || error);
@@ -111,6 +214,11 @@ export const api = {
     verifyOTP:              (data) => userApi.post('/auth/verify-otp', data),
     resendOTP:              (data) => userApi.post('/auth/resend-otp', data),
     login:                  (data) => userApi.post('/auth/login', data),
+    // ✅ NOUVEAU — appelé automatiquement par l'intercepteur, mais exposé
+    // si un composant veut forcer un refresh manuellement
+    refresh:                ()     => userApi.post('/auth/refresh'),
+    // ✅ NOUVEAU — déconnexion propre : efface le cookie côté serveur
+    logout:                 ()     => userApi.post('/auth/logout'),
     getMe:                  ()     => userApi.get('/auth/me'),
     updateProfile:          (data) => userApi.put('/auth/update-profile', data),
     updateDeliverySettings: (data) => userApi.put('/auth/update-delivery', data),
@@ -226,7 +334,7 @@ export const api = {
 
   // ==========================================
   // ADMIN AUTH
-  // ✅ CORRECTION : login envoie { email, password } (plus { username, password })
+  // ✅ CORRECTION conservée : login envoie { email, password }
   // ==========================================
   adminAuth: {
     login: (email, password) =>
