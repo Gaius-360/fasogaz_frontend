@@ -1,24 +1,27 @@
 // ==========================================
 // FICHIER: src/utils/geocoding.js
-// ✅ FIX CORS  : appel via backend
-// ✅ FIX 429   : file d'attente client (1 appel à la fois, délai 1.2s)
-// ✅ FIX 429   : retry backoff 3s/6s/12s
-// ✅ FIX 429   : cache client 1h avec clé arrondie à ~100m
-// ✅ FIX RÉSEAU: détection rapide ERR_NETWORK / ERR_NAME_NOT_RESOLVED
-// ✅ FIX SHAPE : userApi intercepteur retourne response.data directement
-//               → après await userApi.get(...) on obtient le body JSON
-//                 { success, data, ... } et NON pas axios { data: { ... } }
+// ✅ FIX 429 DÉFINITIF côté client :
+//    - Cache client porté à 24h (les quartiers ne bougent pas)
+//    - Clé de cache arrondie à ~1km (3 → 2 décimales) pour maximiser les hits
+//    - File d'attente stricte : 1 appel réseau à la fois, délai 1.5s
+//    - Sur 429 : PAS de retry (ça empire) → retour dégradé immédiat
+//      + backendKnownDown pendant 5 min pour bloquer tous les appels suivants
+//    - Sur ERR_NETWORK : même comportement, blocage 1 min
 // ==========================================
 
 import userApi from '../api/apiSwitch';
 import { cleanAndValidateQuarterName } from '../data/quarterNameCorrections.js';
 
-// ── Cache côté client (LRU manuel, max 100 entrées, TTL 1h) ──────────────────
+// ── Cache côté client ─────────────────────────────────────────────────────────
+// TTL 24h : les noms de quartiers sont stables, inutile de re-géocoder souvent.
+// Clé à 2 décimales ≈ ~1.1km — élargit la zone de hit sans perte de précision
+// significative pour identifier un quartier.
 const CLIENT_CACHE     = new Map();
-const CLIENT_CACHE_TTL = 60 * 60 * 1000; // 1 heure
+const CLIENT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 heures
 
 function clientCacheKey(lat, lon) {
-  return `${parseFloat(lat).toFixed(3)},${parseFloat(lon).toFixed(3)}`;
+  // 2 décimales ≈ 1.1km — suffisant pour un quartier, maximise les hits
+  return `${parseFloat(lat).toFixed(2)},${parseFloat(lon).toFixed(2)}`;
 }
 
 function clientCacheGet(key) {
@@ -32,22 +35,21 @@ function clientCacheGet(key) {
 }
 
 function clientCacheSet(key, data) {
-  if (CLIENT_CACHE.size >= 100) {
+  if (CLIENT_CACHE.size >= 200) {
+    // Éviction LRU : supprimer la plus ancienne entrée
     const firstKey = CLIENT_CACHE.keys().next().value;
     CLIENT_CACHE.delete(firstKey);
   }
   CLIENT_CACHE.set(key, { data, ts: Date.now() });
 }
 
-// ── Résultat dégradé standardisé ─────────────────────────────────────────────
+// ── Résultats dégradés ────────────────────────────────────────────────────────
 function buildNetworkFallback(message = 'Backend indisponible') {
-  return {
-    success:        false,
-    error:          message,
-    quarter:        null,
-    city:           null,
-    isNetworkError: true,
-  };
+  return { success: false, error: message, quarter: null, city: null, isNetworkError: true };
+}
+
+function buildRateLimitFallback() {
+  return { success: false, error: 'Service momentanément surchargé', quarter: null, city: null, isRateLimit: true };
 }
 
 // ── Détection d'erreur réseau ─────────────────────────────────────────────────
@@ -62,38 +64,50 @@ function isNetworkError(error) {
   );
 }
 
-// ── File d'attente client ─────────────────────────────────────────────────────
-let   clientQueue  = Promise.resolve();
-const CLIENT_DELAY = 1200;
-
-let backendKnownDown = false;
-let backendDownTimer = null;
-const GEOCODE_DOWN_RESET = 60_000;
-
-function markGeocodeBackendDown() {
-  backendKnownDown = true;
-  if (backendDownTimer) clearTimeout(backendDownTimer);
-  backendDownTimer = setTimeout(() => {
-    backendKnownDown = false;
-    backendDownTimer = null;
-    console.log('🔄 [geocoding] Réessai backend autorisé');
-  }, GEOCODE_DOWN_RESET);
+function getStatusCode(error) {
+  return (
+    error?.response?.status ||
+    error?.status           ||
+    error?.statusCode       ||
+    null
+  );
 }
+
+// ── Circuit breaker partagé ───────────────────────────────────────────────────
+// Un seul état pour ERR_NETWORK ET 429 — les deux signifient "ne pas appeler".
+let circuitOpen      = false;
+let circuitTimer     = null;
+let circuitReason    = null;
+
+function openCircuit(reason, durationMs) {
+  circuitOpen   = true;
+  circuitReason = reason;
+  if (circuitTimer) clearTimeout(circuitTimer);
+  circuitTimer = setTimeout(() => {
+    circuitOpen   = false;
+    circuitTimer  = null;
+    circuitReason = null;
+    console.log('🔄 [geocoding] Circuit fermé — réessais autorisés');
+  }, durationMs);
+  console.warn(`⚡ [geocoding] Circuit ouvert (${reason}) — pause ${durationMs / 1000}s`);
+}
+
+// ── File d'attente stricte ────────────────────────────────────────────────────
+// 1 seul appel Nominatim à la fois côté client.
+// Délai 1.5s entre chaque appel (marge sur la limite 1 req/s de Nominatim).
+let   clientQueue  = Promise.resolve();
+const CLIENT_DELAY = 1500;
 
 function enqueueGeocode(fn) {
   clientQueue = clientQueue
     .then(() => {
-      if (backendKnownDown) {
-        return buildNetworkFallback('Backend indisponible (court-circuit file)');
+      if (circuitOpen) {
+        return buildNetworkFallback(`Circuit ouvert : ${circuitReason}`);
       }
       return fn();
     })
-    .then(result =>
-      new Promise(resolve => setTimeout(() => resolve(result), CLIENT_DELAY))
-    )
-    .catch(err =>
-      new Promise((_, reject) => setTimeout(() => reject(err), CLIENT_DELAY))
-    );
+    .then(result => new Promise(resolve => setTimeout(() => resolve(result), CLIENT_DELAY)))
+    .catch(err   => new Promise((_, reject) => setTimeout(() => reject(err), CLIENT_DELAY)));
   return clientQueue;
 }
 
@@ -102,152 +116,134 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 /**
  * Géocodage inversé via le backend.
  *
- * ⚠️  userApi (export default de apiSwitch.js) a un intercepteur response qui
- *     retourne response.data directement. Donc :
- *       const body = await userApi.get('/geocoding/multi-zoom', ...)
- *     body === response.data === { success: true, data: { address, zoom, ... } }
+ * Stratégie anti-429 définitive :
+ *  1. Cache 24h → retour immédiat (pas d'appel réseau)
+ *  2. Circuit breaker → si 429 ou ERR_NETWORK récent, retour dégradé immédiat
+ *  3. File d'attente → 1 appel à la fois, délai 1.5s
+ *  4. Sur 429 reçu → ouvre le circuit 5 min, retour dégradé SANS retry
+ *     (retry sur 429 empire toujours la situation)
+ *  5. Sur ERR_NETWORK → ouvre le circuit 1 min, retour dégradé SANS retry
  *
  * @param {number} latitude
  * @param {number} longitude
- * @param {number} maxRetries
  * @returns {Promise<Object>}
  */
-export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
+export const reverseGeocode = async (latitude, longitude) => {
   const key    = clientCacheKey(latitude, longitude);
   const cached = clientCacheGet(key);
 
   if (cached) {
-    console.log(`🗂️ Cache client hit: ${key}`);
+    console.log(`🗂️ [geocoding] Cache hit: ${key}`);
     return cached;
   }
 
-  if (backendKnownDown) {
-    console.warn('⚡ [geocoding] Backend down — court-circuit immédiat');
-    return buildNetworkFallback('Backend indisponible');
+  if (circuitOpen) {
+    console.warn(`⚡ [geocoding] Court-circuit (${circuitReason})`);
+    return buildNetworkFallback(`Circuit ouvert : ${circuitReason}`);
   }
 
   return enqueueGeocode(async () => {
+    // Double-check après attente en file
     const cachedAgain = clientCacheGet(key);
     if (cachedAgain) {
-      console.log(`🗂️ Cache client hit (post-queue): ${key}`);
+      console.log(`🗂️ [geocoding] Cache hit (post-queue): ${key}`);
       return cachedAgain;
     }
 
-    if (backendKnownDown) {
-      return buildNetworkFallback('Backend indisponible (détecté pendant attente file)');
+    if (circuitOpen) {
+      return buildNetworkFallback(`Circuit ouvert : ${circuitReason}`);
     }
 
-    let lastError;
+    try {
+      console.log(`📍 [geocoding] Appel backend: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        if (attempt > 0) {
-          const delay = Math.pow(2, attempt) * 1500;
-          console.log(`⏳ Retry géocodage dans ${delay}ms (tentative ${attempt}/${maxRetries})...`);
-          await sleep(delay);
-        }
+      const body = await userApi.get('/geocoding/multi-zoom', {
+        params: { lat: latitude, lon: longitude }
+      });
 
-        console.log(`📍 Géocodage inversé via backend: ${latitude}, ${longitude}`);
-
-        // ✅ userApi retourne response.data directement (intercepteur apiSwitch.js)
-        // body = { success: true, data: { address: {}, display_name, zoom } }
-        const body = await userApi.get('/geocoding/multi-zoom', {
-          params: { lat: latitude, lon: longitude }
-        });
-
-        if (!body?.success || !body?.data) {
-          console.warn('⚠️ Aucune donnée de géocodage reçue');
-          const fallback = {
-            success:     true,
-            quarter:     null,
-            city:        'Ouagadougou',
-            fullAddress: 'Ouagadougou',
-            warning:     'Aucun quartier trouvé',
-          };
-          clientCacheSet(key, fallback);
-          return fallback;
-        }
-
-        // body.data = objet Nominatim enrichi par geocodingRoutes.js
-        const nominatim = body.data;
-        const address   = nominatim.address || {};
-
-        const rawQuarter =
-          address.suburb        ||
-          address.neighbourhood ||
-          address.hamlet        ||
-          address.quarter       ||
-          address.city_district ||
-          address.residential   ||
-          null;
-
-        const quarter = rawQuarter ? cleanAndValidateQuarterName(rawQuarter) : null;
-
-        if (quarter && rawQuarter !== quarter) {
-          console.log(`🔧 Quartier corrigé: "${rawQuarter}" → "${quarter}"`);
-        }
-
-        const city =
-          address.city         ||
-          address.town         ||
-          address.village      ||
-          address.municipality ||
-          'Ouagadougou';
-
-        console.log('✅ Géocodage réussi:', { quarter, city, zoom: nominatim.zoom });
-
-        const result = {
-          success:     true,
-          quarter,
-          city,
-          fullAddress: nominatim.display_name || `${quarter || ''}, ${city}`.trim(),
-          details: {
-            road:          address.road          || '',
-            suburb:        address.suburb        || '',
-            neighbourhood: address.neighbourhood || '',
-            city_district: address.city_district || '',
-            postcode:      address.postcode      || '',
-            country:       address.country       || 'Burkina Faso',
-            zoom:          nominatim.zoom,
-          },
-          raw: address,
+      if (!body?.success || !body?.data) {
+        console.warn('⚠️ [geocoding] Réponse vide');
+        const fallback = {
+          success: true, quarter: null, city: 'Ouagadougou',
+          fullAddress: 'Ouagadougou', warning: 'Aucun quartier trouvé',
         };
-
-        clientCacheSet(key, result);
-        return result;
-
-      } catch (error) {
-        lastError = error;
-
-        // ── Erreur réseau → retour dégradé immédiat, pas de retry ────────
-        if (isNetworkError(error)) {
-          console.error('🔴 [geocoding] Erreur réseau:', error.code || error.message);
-          markGeocodeBackendDown();
-          return buildNetworkFallback(
-            error.userMessage || 'Backend indisponible. Réessayez dans quelques instants.'
-          );
-        }
-
-        const status = error?.response?.status || error?.status;
-
-        // ── 429 → retry avec backoff ──────────────────────────────────────
-        if (status === 429 && attempt < maxRetries) {
-          console.warn(`⚠️ Géocodage 429 — backoff avant retry ${attempt + 1}/${maxRetries}`);
-          continue;
-        }
-
-        // Autre erreur HTTP → sortie sans retry
-        break;
+        clientCacheSet(key, fallback);
+        return fallback;
       }
-    }
 
-    console.error('❌ Erreur géocodage backend après retries:', lastError?.message);
-    return {
-      success: false,
-      error:   lastError?.message || 'Erreur de géocodage',
-      quarter: null,
-      city:    null,
-    };
+      const nominatim = body.data;
+      const address   = nominatim.address || {};
+
+      const rawQuarter =
+        address.suburb        ||
+        address.neighbourhood ||
+        address.hamlet        ||
+        address.quarter       ||
+        address.city_district ||
+        address.residential   ||
+        null;
+
+      const quarter = rawQuarter ? cleanAndValidateQuarterName(rawQuarter) : null;
+
+      if (quarter && rawQuarter !== quarter) {
+        console.log(`🔧 [geocoding] Quartier corrigé: "${rawQuarter}" → "${quarter}"`);
+      }
+
+      const city =
+        address.city         ||
+        address.town         ||
+        address.village      ||
+        address.municipality ||
+        'Ouagadougou';
+
+      console.log(`✅ [geocoding] OK: ${quarter}, ${city} (zoom ${nominatim.zoom})`);
+
+      const result = {
+        success:     true,
+        quarter,
+        city,
+        fullAddress: nominatim.display_name || `${quarter || ''}, ${city}`.trim(),
+        details: {
+          road:          address.road          || '',
+          suburb:        address.suburb        || '',
+          neighbourhood: address.neighbourhood || '',
+          city_district: address.city_district || '',
+          postcode:      address.postcode      || '',
+          country:       address.country       || 'Burkina Faso',
+          zoom:          nominatim.zoom,
+        },
+        raw: address,
+      };
+
+      clientCacheSet(key, result);
+      return result;
+
+    } catch (error) {
+      const status = getStatusCode(error);
+
+      // ── 429 : JAMAIS de retry — ouvre le circuit 5 min ───────────────
+      // Retenter sur 429 empire systématiquement la situation.
+      // On attend 5 min que le rate limit Nominatim se réinitialise.
+      if (status === 429) {
+        openCircuit('429 rate limit', 5 * 60_000);
+        return buildRateLimitFallback();
+      }
+
+      // ── Erreur réseau → ouvre le circuit 1 min ────────────────────────
+      if (isNetworkError(error)) {
+        openCircuit('ERR_NETWORK', 60_000);
+        return buildNetworkFallback('Backend indisponible. Réessayez dans quelques instants.');
+      }
+
+      // ── Autre erreur HTTP (500, 503…) → retour dégradé sans bloquer ──
+      console.error(`❌ [geocoding] Erreur HTTP ${status}:`, error?.message);
+      return {
+        success: false,
+        error:   error?.message || 'Erreur de géocodage',
+        quarter: null,
+        city:    null,
+      };
+    }
   });
 };
 
@@ -268,7 +264,7 @@ export const validateLocationInSupportedCity = async (latitude, longitude) => {
   if (!result.success) {
     return {
       valid:   false,
-      message: result.isNetworkError
+      message: (result.isNetworkError || result.isRateLimit)
         ? 'Service de localisation temporairement indisponible'
         : 'Impossible de vérifier votre localisation',
     };
