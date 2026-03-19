@@ -1,27 +1,22 @@
 // ==========================================
 // FICHIER: src/api/adminAuthService.js
-// Service d'authentification pour l'administrateur
+// ✅ VERSION FINALE — Login par email (plus username)
 // ==========================================
 
 import api from './axios';
 
 const adminAuthService = {
-  // Connexion administrateur
-  login: async (username, password) => {
-    const response = await api.post('/admin/auth/login', {
-      username,
-      password
-    });
+  // ✅ email + password (l'admin est maintenant en BDD)
+  login: async (email, password) => {
+    const response = await api.post('/admin/auth/login', { email, password });
     return response.data;
   },
 
-  // Obtenir le profil admin
   getProfile: async () => {
-    const response = await api.get('/admin/auth/me');
+    const response = await api.get('/admin/auth/profile');
     return response.data;
   },
 
-  // Changer le mot de passe admin
   changePassword: async (currentPassword, newPassword) => {
     const response = await api.put('/admin/auth/change-password', {
       currentPassword,
@@ -30,7 +25,6 @@ const adminAuthService = {
     return response.data;
   },
 
-  // Déconnexion
   logout: () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');

@@ -1,6 +1,3 @@
-// ==========================================
-// FICHIER: src/App.jsx (VERSION COMPLÈTE AVEC AGENTS)
-// ==========================================
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './store/authStore';
@@ -66,6 +63,16 @@ import AgentDashboard from './pages/agent/AgentDashboard';
 import AgentInvitations from './pages/agent/AgentInvitations';
 import AgentProfile from './pages/agent/AgentProfile';
 
+// ── CONFIGURATION DES ROUTES SÉCURISÉES ──────────────────────────
+// On récupère les chemins depuis le .env (SANS valeur par défaut)
+const ADMIN_LOGIN_PATH = import.meta.env.VITE_ADMIN_LOGIN_PATH;
+const AGENT_LOGIN_PATH = import.meta.env.VITE_AGENT_LOGIN_PATH;
+
+// Log d'avertissement en mode développement uniquement
+if (import.meta.env.DEV && (!ADMIN_LOGIN_PATH || !AGENT_LOGIN_PATH)) {
+  console.error("❌ ERREUR CRITIQUE : Les routes Admin ou Agent ne sont pas définies dans le .env");
+}
+
 function App() {
   const { isAuthenticated, user, initAuth } = useAuthStore();
 
@@ -73,18 +80,15 @@ function App() {
     // Initialisation auth
     initAuth();
 
-    // ── Fermeture du splash natif (index.html) ──────────────
-    // On attend que l'animation soit bien visible,
-    // puis on appelle la fonction injectée dans index.html.
+    // Fermeture du splash natif
     const timer = setTimeout(() => {
       if (typeof window.__FG_HIDE_SPLASH__ === 'function') {
         window.__FG_HIDE_SPLASH__();
       }
-    }, 2200); // ← durée splash en ms (ajustable)
+    }, 2200);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initAuth]);
 
   return (
     <Router>
@@ -92,9 +96,8 @@ function App() {
         <Routes>
 
           {/* ========================================= */}
-          {/* ROUTES PUBLIQUES */}
+          {/* ROUTES PUBLIQUES & REDIRECTIONS */}
           {/* ========================================= */}
-
           <Route
             path="/"
             element={
@@ -120,17 +123,18 @@ function App() {
           <Route path="/register-revendeur" element={<RegisterRevendeur />} />
 
           {/* ========================================= */}
-          {/* 🔐 ADMIN - URL SECRÈTE */}
+          {/* 🔐 ACCÈS SÉCURISÉS (URLs du .env) */}
           {/* ========================================= */}
-          <Route path="/secure/admin/3k9f2j8h4n7m/login" element={<AdminLogin />} />
+          {ADMIN_LOGIN_PATH && (
+            <Route path={ADMIN_LOGIN_PATH} element={<AdminLogin />} />
+          )}
+
+          {AGENT_LOGIN_PATH && (
+            <Route path={AGENT_LOGIN_PATH} element={<AgentLogin />} />
+          )}
 
           {/* ========================================= */}
-          {/* 🔐 AGENT - URL SECRÈTE */}
-          {/* ========================================= */}
-          <Route path="/secure/agent/7h3k9m2p5n8q/login" element={<AgentLogin />} />
-
-          {/* ========================================= */}
-          {/* ROUTES CLIENT */}
+          {/* ROUTES CLIENT (Protégées) */}
           {/* ========================================= */}
           <Route path="/client" element={<ProtectedRoute allowedRoles={['client']}><ClientLayout /></ProtectedRoute>}>
             <Route path="map" element={<MapPage />} />
@@ -145,7 +149,7 @@ function App() {
           </Route>
 
           {/* ========================================= */}
-          {/* ROUTES REVENDEUR */}
+          {/* ROUTES REVENDEUR (Protégées) */}
           {/* ========================================= */}
           <Route path="/seller" element={<ProtectedRoute allowedRoles={['revendeur']}><SellerLayout /></ProtectedRoute>}>
             <Route path="dashboard" element={<SellerDashboard />} />
@@ -159,7 +163,7 @@ function App() {
           </Route>
 
           {/* ========================================= */}
-          {/* ROUTES AGENT */}
+          {/* ROUTES AGENT (Protégées) */}
           {/* ========================================= */}
           <Route path="/agent" element={<ProtectedAgentRoute><AgentLayout /></ProtectedAgentRoute>}>
             <Route path="dashboard" element={<AgentDashboard />} />
@@ -168,7 +172,7 @@ function App() {
           </Route>
 
           {/* ========================================= */}
-          {/* ROUTES ADMIN */}
+          {/* ROUTES ADMIN (Protégées) */}
           {/* ========================================= */}
           <Route path="/admin" element={<ProtectedAdminRoute><AdminLayout /></ProtectedAdminRoute>}>
             <Route path="dashboard" element={<AdminDashboard />} />
@@ -186,7 +190,7 @@ function App() {
             <Route path="invitations" element={<AdminInvitations />} />
           </Route>
 
-          {/* 404 */}
+          {/* Redirection automatique des erreurs 404 vers l'accueil */}
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>

@@ -1,42 +1,44 @@
 // ==========================================
 // FICHIER: src/components/layout/ClientLayout.jsx
-// Layout avec couleurs GAZBF - 100% Responsive (SANS DÉCONNEXION)
+// ✅ AJOUT: PushNotificationGate role="client" (non bloquant)
+// ✅ AJOUT: NotificationBell desktop + mobile
 // ✅ FIX: logo avec skeleton + fallback (LogoImage)
 // ==========================================
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Map, ShoppingBag, User, CreditCard, Star, 
+import {
+  Map, ShoppingBag, User, CreditCard, Star,
   X, Settings, Phone, ArrowLeftRight
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import LogoImage, { FasoGazWordmark } from '../common/LogoImage';
+import NotificationBell from '../common/NotificationBell';
+import PushNotificationGate from '../common/PushNotificationGate';
 
 const ClientLayout = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const navItems = [
-    { to: '/client/map', icon: Map, label: 'Carte' },
-    { to: '/client/orders', icon: ShoppingBag, label: 'Commandes' },
-    { to: '/client/my-reviews', icon: Star, label: 'Avis' },
+    { to: '/client/map',             icon: Map,       label: 'Carte'     },
+    { to: '/client/orders',          icon: ShoppingBag, label: 'Commandes' },
+    { to: '/client/my-reviews',      icon: Star,      label: 'Avis'      },
     { to: '/client/payment-history', icon: CreditCard, label: 'Paiements' },
-    { to: '/client/profile', icon: User, label: 'Profil' }
+    { to: '/client/profile',         icon: User,      label: 'Profil'    },
   ];
 
   return (
     <div className="min-h-screen bg-neutral-50">
-      
+
       {/* ── HEADER ── */}
       <header className="bg-white shadow-md border-b-4 border-gradient-gazbf sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
-            
-            {/* Logo - ✅ FIX: LogoImage avec skeleton + fallback */}
-            <div 
+
+            {/* Logo */}
+            <div
               className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
               onClick={() => navigate('/client/map')}
             >
@@ -79,8 +81,11 @@ const ClientLayout = () => {
               })}
             </nav>
 
-            {/* User Actions Desktop */}
+            {/* Actions Desktop */}
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
+              {/* ✅ AJOUT NotificationBell desktop */}
+              <NotificationBell />
+
               <button
                 onClick={() => navigate('/client/settings')}
                 className="p-2 text-neutral-600 hover:bg-primary-50 hover:text-primary-600 rounded-lg transition-colors"
@@ -88,7 +93,7 @@ const ClientLayout = () => {
               >
                 <Settings className="h-4 w-4 lg:h-5 lg:w-5" />
               </button>
-              
+
               <div className="flex items-center gap-2 lg:gap-3 pl-2 lg:pl-3 border-l-2 border-neutral-200">
                 <div className="text-right hidden lg:block">
                   <p className="text-xs lg:text-sm font-bold text-neutral-900">
@@ -112,23 +117,28 @@ const ClientLayout = () => {
               </button>
             </div>
 
-            {/* Mobile Profile Avatar Button */}
-            <button
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="md:hidden relative"
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-full flex items-center justify-center ring-2 ring-primary-300 hover:ring-primary-400 transition-all">
-                <span className="text-sm font-bold text-white">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
-                </span>
-              </div>
-            </button>
+            {/* Actions Mobile */}
+            <div className="md:hidden flex items-center gap-2">
+              {/* ✅ AJOUT NotificationBell mobile */}
+              <NotificationBell />
+
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="relative"
+              >
+                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-full flex items-center justify-center ring-2 ring-primary-300 hover:ring-primary-400 transition-all">
+                  <span className="text-sm font-bold text-white">
+                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  </span>
+                </div>
+              </button>
+            </div>
           </div>
 
-          {/* Mobile Profile Menu */}
+          {/* Menu profil mobile */}
           {showProfileMenu && (
             <>
-              <div 
+              <div
                 className="md:hidden fixed inset-0 bg-black/30 z-40 animate-fade-in"
                 onClick={() => setShowProfileMenu(false)}
               />
@@ -136,7 +146,10 @@ const ClientLayout = () => {
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-4 pb-4 border-b-2 border-neutral-100">
                     <h3 className="text-lg font-bold text-gray-900">Mon Profil</h3>
-                    <button onClick={() => setShowProfileMenu(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <button
+                      onClick={() => setShowProfileMenu(false)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
                       <X className="h-5 w-5 text-gray-500" />
                     </button>
                   </div>
@@ -149,7 +162,9 @@ const ClientLayout = () => {
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-lg font-bold text-gray-900 truncate">{user?.firstName} {user?.lastName}</p>
+                        <p className="text-lg font-bold text-gray-900 truncate">
+                          {user?.firstName} {user?.lastName}
+                        </p>
                         <p className="text-sm text-gray-600 flex items-center gap-1">
                           <Phone className="h-3 w-3" />
                           {user?.phone}
@@ -169,14 +184,23 @@ const ClientLayout = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <button onClick={() => { navigate('/client/profile'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium">
+                    <button
+                      onClick={() => { navigate('/client/profile'); setShowProfileMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium"
+                    >
                       <User className="h-5 w-5" /><span>Modifier le profil</span>
                     </button>
-                    <button onClick={() => { navigate('/client/settings'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium">
+                    <button
+                      onClick={() => { navigate('/client/settings'); setShowProfileMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-neutral-700 hover:bg-primary-50 hover:text-primary-600 rounded-xl transition-colors font-medium"
+                    >
                       <Settings className="h-5 w-5" /><span>Paramètres</span>
                     </button>
                     <div className="pt-3 mt-1 border-t border-neutral-100">
-                      <button onClick={() => { navigate('/login'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-neutral-400 hover:bg-neutral-50 hover:text-neutral-600 rounded-xl transition-colors font-medium">
+                      <button
+                        onClick={() => { navigate('/login'); setShowProfileMenu(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-neutral-400 hover:bg-neutral-50 hover:text-neutral-600 rounded-xl transition-colors font-medium"
+                      >
                         <ArrowLeftRight className="h-5 w-5" /><span>Retour à la connexion</span>
                       </button>
                     </div>
@@ -193,31 +217,40 @@ const ClientLayout = () => {
         @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
         .animate-slide-down { animation: slide-down 0.2s ease-out; }
         .animate-fade-in { animation: fade-in 0.2s ease-out; }
+        .safe-area-inset-bottom { padding-bottom: env(safe-area-inset-bottom); }
       `}</style>
 
-      {/* ── MAIN CONTENT ── */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-20 md:pb-6">
-        <Outlet />
-      </main>
+      {/* ── PushNotificationGate client (non bloquant) + contenu ── */}
+      <PushNotificationGate role="client">
 
-      {/* ── BOTTOM NAVIGATION mobile ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-neutral-200 shadow-lg z-50">
-        <div className="grid grid-cols-5 gap-0.5 px-1 py-1.5 safe-area-inset-bottom">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <NavLink key={item.to} to={item.to} className="flex flex-col items-center justify-center py-1.5 rounded-lg transition-all touch-manipulation">
-                <div className={`p-1.5 rounded-lg ${isActive ? 'bg-gradient-to-br from-primary-500 to-secondary-500' : ''}`}>
-                  <item.icon className={`h-5 w-5 mb-0.5 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
-                </div>
-                <span className={`text-[10px] font-semibold leading-tight ${isActive ? 'text-primary-600' : 'text-neutral-500'}`}>
-                  {item.label}
-                </span>
-              </NavLink>
-            );
-          })}
-        </div>
-      </nav>
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 pb-20 md:pb-6">
+          <Outlet />
+        </main>
+
+        {/* ── Navigation mobile bottom ── */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-neutral-200 shadow-lg z-50">
+          <div className="grid grid-cols-5 gap-0.5 px-1 py-1.5 safe-area-inset-bottom">
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.to;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className="flex flex-col items-center justify-center py-1.5 rounded-lg transition-all touch-manipulation"
+                >
+                  <div className={`p-1.5 rounded-lg ${isActive ? 'bg-gradient-to-br from-primary-500 to-secondary-500' : ''}`}>
+                    <item.icon className={`h-5 w-5 mb-0.5 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
+                  </div>
+                  <span className={`text-[10px] font-semibold leading-tight ${isActive ? 'text-primary-600' : 'text-neutral-500'}`}>
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
+
+      </PushNotificationGate>
     </div>
   );
 };

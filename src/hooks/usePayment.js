@@ -1,6 +1,6 @@
 // ==========================================
 // FICHIER: src/hooks/usePayment.js
-// Version utilisant api.payments
+// ✅ Types acceptés: 'subscription' | 'client_subscription'
 // ==========================================
 
 import { useState } from 'react';
@@ -8,10 +8,13 @@ import { api } from '../api/apiSwitch';
 
 export const usePayment = () => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]     = useState(null);
 
   /**
    * Initier un paiement et rediriger vers LigdiCash
+   * @param {number} amount
+   * @param {'subscription'|'client_subscription'} type
+   * @param {{ planType: string }} metadata
    */
   const initiatePayment = async (amount, type, metadata = {}) => {
     setLoading(true);
@@ -20,70 +23,46 @@ export const usePayment = () => {
     try {
       console.log('💳 Initiation paiement:', { amount, type, metadata });
 
-      // ✅ Utiliser api.payments.initiatePayment
-      const response = await api.payments.initiatePayment({
-        amount,
-        type,
-        metadata
-      });
+      const response = await api.payments.initiatePayment({ amount, type, metadata });
 
       if (response?.success && response.data) {
         console.log('✅ Paiement initié:', response.data);
+        if (response.data.isSimulation) console.log('🧪 Mode SIMULATION activé');
 
-        if (response.data.isSimulation) {
-          console.log('🧪 Mode SIMULATION activé');
-        }
-
-        // Rediriger vers la page de paiement
+        // Redirection vers la page de paiement LigdiCash
         window.location.href = response.data.paymentUrl;
-        
         return response.data;
-      } else {
-        throw new Error(response?.message || 'Erreur lors de l\'initiation du paiement');
       }
+
+      throw new Error(response?.message || "Erreur lors de l'initiation du paiement");
+
     } catch (err) {
       console.error('❌ Erreur paiement:', err);
-      const errorMessage = err.message || 'Erreur lors du paiement';
-      setError(errorMessage);
-      throw new Error(errorMessage);
+      const msg = err.message || 'Erreur lors du paiement';
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   /**
-   * Vérifier le statut d'une transaction
+   * Vérifier le statut d'une transaction après retour LigdiCash
    */
   const checkPaymentStatus = async (transactionNumber) => {
     try {
-      // ✅ Utiliser api.payments.checkStatus
       const response = await api.payments.checkStatus(transactionNumber);
-      
-      if (response?.success) {
-        return response.data;
-      }
-      
+      if (response?.success) return response.data;
       throw new Error('Impossible de vérifier le statut');
     } catch (err) {
-      console.error('❌ Erreur vérification statut:', err);
+      console.error('❌ Erreur statut:', err);
       throw err;
     }
   };
 
-  /**
-   * Réinitialiser l'erreur
-   */
-  const clearError = () => {
-    setError(null);
-  };
+  const clearError = () => setError(null);
 
-  return {
-    loading,
-    error,
-    initiatePayment,
-    checkPaymentStatus,
-    clearError
-  };
+  return { loading, error, initiatePayment, checkPaymentStatus, clearError };
 };
 
 export default usePayment;

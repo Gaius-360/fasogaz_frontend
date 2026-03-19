@@ -1,11 +1,10 @@
 // ==========================================
 // FICHIER: src/utils/helpers.js
-// ✅ FIX: Importer userApi
+// ✅ FIX: reverseGeocode via backend (pas de CORS)
 // ✅ getCurrentPosition — stratégie multi-mesures haute précision
 // ==========================================
 
 import { correctQuarterName, cleanAndValidateQuarterName } from '../data/quarterNameCorrections.js';
-// ✅ AJOUT: Importer userApi
 import userApi from '../api/apiSwitch';
 
 /**
@@ -32,14 +31,14 @@ export const formatDistance = (distance) => {
  */
 export const formatDate = (dateString) => {
   if (!dateString) return '';
-  
+
   const date = new Date(dateString);
-  const options = { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const options = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   };
-  
+
   return date.toLocaleDateString('fr-FR', options);
 };
 
@@ -48,16 +47,16 @@ export const formatDate = (dateString) => {
  */
 export const formatDateTime = (dateString) => {
   if (!dateString) return '';
-  
+
   const date = new Date(dateString);
-  const options = { 
-    year: 'numeric', 
-    month: 'short', 
+  const options = {
+    year: 'numeric',
+    month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
   };
-  
+
   return date.toLocaleDateString('fr-FR', options);
 };
 
@@ -66,41 +65,43 @@ export const formatDateTime = (dateString) => {
  */
 export const formatRelativeTime = (dateString) => {
   if (!dateString) return '';
-  
+
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now - date) / 1000);
-  
+
   if (diffInSeconds < 60) {
     return 'À l\'instant';
   }
-  
+
   const diffInMinutes = Math.floor(diffInSeconds / 60);
   if (diffInMinutes < 60) {
     return `Il y a ${diffInMinutes} min`;
   }
-  
+
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) {
     return `Il y a ${diffInHours}h`;
   }
-  
+
   const diffInDays = Math.floor(diffInHours / 24);
   if (diffInDays < 7) {
     return `Il y a ${diffInDays}j`;
   }
-  
+
   return formatDate(dateString);
 };
 
 /**
  * ✅ GÉOCODAGE INVERSÉ via backend (évite CORS)
+ * @param {number} latitude
+ * @param {number} longitude
+ * @returns {Promise<Object>}
  */
 export const reverseGeocode = async (latitude, longitude) => {
   try {
     console.log(`📍 Géocodage inversé via backend: ${latitude}, ${longitude}`);
 
-    // ✅ Appeler le backend au lieu de Nominatim directement
     const response = await userApi.get('/geocoding/multi-zoom', {
       params: { lat: latitude, lon: longitude }
     });
@@ -120,14 +121,14 @@ export const reverseGeocode = async (latitude, longitude) => {
     const data = response.data;
     const address = data.address || {};
 
-    // ✅ Extraire et corriger le quartier
-    const rawQuarter = 
-      address.suburb       ||
+    // Extraire et corriger le quartier
+    const rawQuarter =
+      address.suburb        ||
       address.neighbourhood ||
-      address.hamlet       ||
-      address.quarter      ||
+      address.hamlet        ||
+      address.quarter       ||
       address.city_district ||
-      address.residential  ||
+      address.residential   ||
       null;
 
     const quarter = rawQuarter ? cleanAndValidateQuarterName(rawQuarter) : null;
@@ -136,20 +137,14 @@ export const reverseGeocode = async (latitude, longitude) => {
       console.log(`🔧 Quartier corrigé: "${rawQuarter}" → "${quarter}"`);
     }
 
-    // Extraire la ville
-    const city = 
-      address.city         || 
-      address.town         || 
-      address.village      || 
+    const city =
+      address.city         ||
+      address.town         ||
+      address.village      ||
       address.municipality ||
       'Ouagadougou';
 
-    console.log('✅ Géocodage réussi:', {
-      quarter,
-      city,
-      zoom: data.zoom,
-      source: 'backend'
-    });
+    console.log('✅ Géocodage réussi:', { quarter, city, zoom: data.zoom, source: 'backend' });
 
     return {
       success: true,
@@ -157,13 +152,13 @@ export const reverseGeocode = async (latitude, longitude) => {
       city,
       fullAddress: data.display_name || `${quarter || ''}, ${city}`.trim(),
       details: {
-        road: address.road || '',
-        suburb: address.suburb || '',
+        road:          address.road          || '',
+        suburb:        address.suburb        || '',
         neighbourhood: address.neighbourhood || '',
         city_district: address.city_district || '',
-        postcode: address.postcode || '',
-        country: address.country || 'Burkina Faso',
-        zoom: data.zoom
+        postcode:      address.postcode      || '',
+        country:       address.country       || 'Burkina Faso',
+        zoom:          data.zoom,
       },
       raw: address,
       source: 'backend'
@@ -171,7 +166,7 @@ export const reverseGeocode = async (latitude, longitude) => {
 
   } catch (error) {
     console.error('❌ Erreur géocodage backend:', error);
-    
+
     return {
       success: false,
       error: error.message,
@@ -327,8 +322,8 @@ export const getCurrentPosition = () => {
       }
     }, TIMEOUT_MS);
 
-    // ✅ watchPosition au lieu de getCurrentPosition :
-    //    collecte plusieurs mesures successives au lieu d'une seule
+    // watchPosition au lieu de getCurrentPosition :
+    // collecte plusieurs mesures successives au lieu d'une seule
     watchId = navigator.geolocation.watchPosition(onSuccess, onError, {
       enableHighAccuracy: true,  // Force le GPS matériel (pas WiFi/IP)
       timeout:            TIMEOUT_MS,
@@ -341,16 +336,14 @@ export const getCurrentPosition = () => {
  * Ouvre l'application de navigation vers un lieu
  */
 export const openNavigationToLocation = (latitude, longitude, placeName, userLocation = null) => {
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent);
-  
+
   let navigationUrl;
-  
+
   if (userLocation && userLocation.latitude && userLocation.longitude) {
     if (isIOS) {
       navigationUrl = `http://maps.apple.com/?saddr=${userLocation.latitude},${userLocation.longitude}&daddr=${latitude},${longitude}&dirflg=d`;
-    } else if (isAndroid) {
-      navigationUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.latitude},${userLocation.longitude}&destination=${latitude},${longitude}&travelmode=driving`;
     } else {
       navigationUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.latitude},${userLocation.longitude}&destination=${latitude},${longitude}&travelmode=driving`;
     }
@@ -361,14 +354,14 @@ export const openNavigationToLocation = (latitude, longitude, placeName, userLoc
       navigationUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
     }
   }
-  
+
   console.log('🗺️ Ouverture navigation:', {
     url: navigationUrl,
     destination: placeName,
     coords: `${latitude}, ${longitude}`,
     hasUserLocation: !!userLocation
   });
-  
+
   window.open(navigationUrl, '_blank');
 };
 
@@ -376,24 +369,22 @@ export const openNavigationToLocation = (latitude, longitude, placeName, userLoc
  * Calculer la distance entre deux points GPS (en km)
  */
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
+  const R    = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  
-  const a = 
+
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  const c        = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c;
-  
+
   return Math.round(distance * 10) / 10;
 };
 
-const toRad = (value) => {
-  return value * Math.PI / 180;
-};
+const toRad = (value) => value * Math.PI / 180;
 
 /**
  * Tronquer un texte avec ellipse
@@ -409,7 +400,7 @@ export const truncate = (text, maxLength) => {
  */
 export const getInitials = (firstName, lastName) => {
   const first = firstName ? firstName.charAt(0).toUpperCase() : '';
-  const last = lastName ? lastName.charAt(0).toUpperCase() : '';
+  const last  = lastName  ? lastName.charAt(0).toUpperCase()  : '';
   return first + last;
 };
 
@@ -426,17 +417,17 @@ export const isValidPhoneNumber = (phone) => {
  */
 export const formatPhoneNumber = (phone) => {
   if (!phone) return '';
-  
+
   const cleaned = phone.replace(/\D/g, '');
-  
+
   if (cleaned.startsWith('226')) {
     return '+' + cleaned;
   }
-  
+
   if (cleaned.startsWith('0')) {
     return '+226' + cleaned.substring(1);
   }
-  
+
   return '+226' + cleaned;
 };
 
@@ -454,7 +445,7 @@ export const copyToClipboard = async (text) => {
 };
 
 /**
- * Générer une couleur aléatoire
+ * Générer une couleur aléatoire (classe Tailwind)
  */
 export const getRandomColor = () => {
   const colors = [
@@ -467,7 +458,7 @@ export const getRandomColor = () => {
     'bg-indigo-500',
     'bg-teal-500'
   ];
-  
+
   return colors[Math.floor(Math.random() * colors.length)];
 };
 
@@ -478,7 +469,7 @@ export const fileToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
+    reader.onload  = () => resolve(reader.result);
     reader.onerror = error => reject(error);
   });
 };
@@ -512,11 +503,11 @@ export const getErrorMessage = (error) => {
   if (error.response?.data?.message) {
     return error.response.data.message;
   }
-  
+
   if (error.message) {
     return error.message;
   }
-  
+
   return 'Une erreur est survenue';
 };
 

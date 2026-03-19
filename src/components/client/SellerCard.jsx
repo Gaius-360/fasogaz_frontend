@@ -1,52 +1,45 @@
 // ==========================================
 // FICHIER: src/components/client/SellerCard.jsx
-// Card revendeur avec couleurs FasoGaz
+// ✅ FIX: AccessPurchaseModal → SubscriptionModal
+// ✅ RESTAURÉ: badge distance, prix minimum, badges produits,
+//             indicateur stock, note/avis — tous les détails originaux
 // ==========================================
 import React, { useState } from 'react';
 import { MapPin, Star, Phone, Navigation, Package, Building2, Lock } from 'lucide-react';
 import Button from '../common/Button';
 import { formatPrice, formatDistance } from '../../utils/helpers';
-import AccessPurchaseModal from './AccessPurchaseModal';
+import SubscriptionModal from './SubscriptionModal';
 
-const SellerCard = ({ 
-  seller, 
-  onViewDetails, 
-  onCall, 
-  onNavigate, 
+const SellerCard = ({
+  seller,
+  onViewDetails,
+  onCall,
+  onNavigate,
   distance,
-  hasAccess = false,
-  onAccessRequired 
+  hasAccess = true,
+  onAccessRequired
 }) => {
-  const [showAccessModal, setShowAccessModal] = useState(false);
-  
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+
   const hasProducts = seller.products && seller.products.length > 0;
-  const lowestPrice = hasProducts 
+  const lowestPrice = hasProducts
     ? Math.min(...seller.products.map(p => parseFloat(p.price)))
     : null;
 
-  const displayName = seller.businessName || 
-                      `${seller.firstName || ''} ${seller.lastName || ''}`.trim() ||
-                      `Dépôt ${seller.quarter || seller.city || 'Gaz'}`;
+  const displayName = seller.businessName ||
+    `${seller.firstName || ''} ${seller.lastName || ''}`.trim() ||
+    `Dépôt ${seller.quarter || seller.city || 'Gaz'}`;
 
-  const handleProtectedAction = (action, ...args) => {
-    if (!hasAccess) {
-      setShowAccessModal(true);
-      return;
-    }
-    action(...args);
-  };
-
-  const handleAccessPurchased = () => {
-    setShowAccessModal(false);
-    if (onAccessRequired) {
-      onAccessRequired();
-    }
+  const handleSubscriptionSuccess = () => {
+    setShowSubscriptionModal(false);
+    if (onAccessRequired) onAccessRequired();
   };
 
   return (
     <>
       <div className="bg-white rounded-xl border-2 border-neutral-200 hover:border-primary-300 hover:shadow-gazbf transition-all duration-200 p-4 cursor-pointer h-full flex flex-col">
-        {/* Header */}
+
+        {/* ── Header : nom + badge distance ── */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -63,7 +56,7 @@ const SellerCard = ({
             </div>
           </div>
 
-          {/* Badge distance */}
+          {/* Badge distance — affiché uniquement si la valeur est disponible */}
           {distance !== null && distance !== undefined && (
             <div className="ml-2 flex-shrink-0 bg-gradient-to-br from-primary-500 to-primary-600 px-2.5 py-1 rounded-lg shadow-sm">
               <span className="text-xs font-bold text-white">
@@ -73,7 +66,7 @@ const SellerCard = ({
           )}
         </div>
 
-        {/* Note et prix */}
+        {/* ── Note et prix le plus bas ── */}
         <div className="flex items-center justify-between mb-3">
           {seller.averageRating > 0 ? (
             <div className="flex items-center gap-1">
@@ -90,9 +83,16 @@ const SellerCard = ({
               Nouveau
             </span>
           )}
+
+          {/* Prix minimum parmi les produits */}
+          {lowestPrice !== null && (
+            <span className="text-xs font-bold text-primary-600">
+              À partir de {formatPrice(lowestPrice)}
+            </span>
+          )}
         </div>
 
-        {/* Produits */}
+        {/* ── Nombre de produits ── */}
         {hasProducts && (
           <div className="flex items-center gap-1 mb-3 text-xs text-neutral-600">
             <Package className="h-3 w-3 flex-shrink-0 text-accent-500" />
@@ -102,7 +102,7 @@ const SellerCard = ({
           </div>
         )}
 
-        {/* Badges produits */}
+        {/* ── Badges produits (type de bouteille + statut stock) ── */}
         {hasProducts && (
           <div className="flex flex-wrap gap-1.5 mb-3 flex-1">
             {seller.products.slice(0, 2).map((product) => (
@@ -128,80 +128,63 @@ const SellerCard = ({
           </div>
         )}
 
-        {/* Indicateur d'accès */}
-        {!hasAccess && (
-          <div className="mb-3 bg-gradient-to-r from-secondary-50 to-secondary-100 border-2 border-secondary-200 rounded-lg px-2 py-2">
-            <div className="flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-secondary-600 flex-shrink-0" />
-              <p className="text-xs text-secondary-800 font-bold">
-                Accès 24h requis pour les détails
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
+        {/* ── Actions ── */}
         <div className="grid grid-cols-3 gap-2 mt-auto">
-          {seller.latitude && seller.longitude ? (
+
+          {/* Navigation GPS */}
+          {parseFloat(seller.latitude) && parseFloat(seller.longitude) ? (
             <Button
               variant="outline"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                handleProtectedAction(onNavigate, seller);
+                onNavigate(seller);
               }}
-              title={hasAccess ? "Itinéraire" : "Accès requis"}
-              className="p-2 relative"
+              title="Itinéraire"
+              className="p-2"
             >
               <Navigation className="h-4 w-4" />
-              {!hasAccess && (
-                <Lock className="h-2.5 w-2.5 absolute -top-1 -right-1 text-secondary-600" />
-              )}
             </Button>
           ) : (
             <div className="text-xs text-neutral-400 flex items-center justify-center border-2 border-neutral-200 rounded-lg">
               <MapPin className="h-3.5 w-3.5" />
             </div>
           )}
-          
+
+          {/* Appel */}
           <Button
             variant="outline"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleProtectedAction(onCall, seller.phone);
+              onCall(seller.phone);
             }}
-            title={hasAccess ? "Appeler" : "Accès requis"}
-            className="p-2 relative"
+            title="Appeler"
+            className="p-2"
           >
             <Phone className="h-4 w-4" />
-            {!hasAccess && (
-              <Lock className="h-2.5 w-2.5 absolute -top-1 -right-1 text-secondary-600" />
-            )}
           </Button>
-          
+
+          {/* Voir détails */}
           <Button
-            variant={hasAccess ? "primary" : "secondary"}
+            variant="primary"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleProtectedAction(onViewDetails, seller);
+              onViewDetails(seller);
             }}
-            className="text-xs relative font-bold"
+            className="text-xs font-bold"
           >
-            {hasAccess ? 'Voir' : 'Débloquer'}
-            {!hasAccess && (
-              <Lock className="h-2.5 w-2.5 absolute -top-1 -right-1 text-white" />
-            )}
+            Voir
           </Button>
         </div>
       </div>
 
-      {/* Modal d'achat d'accès */}
-      {showAccessModal && (
-        <AccessPurchaseModal
-          onClose={() => setShowAccessModal(false)}
-          onSuccess={handleAccessPurchased}
+      {/* Modal abonnement */}
+      {showSubscriptionModal && (
+        <SubscriptionModal
+          onClose={() => setShowSubscriptionModal(false)}
+          onSuccess={handleSubscriptionSuccess}
         />
       )}
     </>

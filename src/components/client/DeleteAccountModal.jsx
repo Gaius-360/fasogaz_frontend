@@ -20,36 +20,37 @@ const DeleteAccountModal = ({ onClose, user }) => {
   const [confirmation, setConfirmation] = useState('');
 
   const handleDelete = async () => {
-    if (!password) {
-      setError('Le mot de passe est requis');
-      return;
+  if (!password) {
+    setError('Le mot de passe est requis');
+    return;
+  }
+
+  if (confirmation !== 'SUPPRIMER') {
+    setError('Veuillez taper exactement "SUPPRIMER" pour confirmer');
+    return;
+  }
+
+  setLoading(true);
+  setError(null);
+
+  try {
+    const response = await api.auth.deleteAccount({ password });
+
+    if (response.success) {
+      logout();
+      navigate('/', {
+        state: {
+          message: 'Votre compte a été supprimé avec succès. Nous sommes désolés de vous voir partir.'
+        }
+      });
     }
-
-    if (confirmation !== 'SUPPRIMER') {
-      setError('Veuillez taper exactement "SUPPRIMER" pour confirmer');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await api.auth.deleteAccount({ password });
-
-      if (response.success) {
-        logout();
-        navigate('/', { 
-          state: { 
-            message: 'Votre compte a été supprimé avec succès. Nous sommes désolés de vous voir partir.' 
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Erreur suppression compte:', err);
-      setError(err.message || 'Erreur lors de la suppression du compte');
-      setLoading(false);
-    }
-  };
+  } catch (err) {
+    console.error('Erreur suppression compte:', err);
+    setError(err.response?.data?.message || 'Une erreur est survenue. Veuillez réessayer.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -138,17 +139,6 @@ const DeleteAccountModal = ({ onClose, user }) => {
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="bg-primary-50 border-2 border-primary-200 rounded-xl p-4">
-                <h4 className="font-bold text-primary-900 mb-2">
-                  Vous souhaitez juste faire une pause ?
-                </h4>
-                <p className="text-sm text-primary-800">
-                  Si vous souhaitez simplement arrêter de recevoir des notifications ou désactiver 
-                  temporairement votre compte, contactez notre support. Nous pouvons vous proposer 
-                  des alternatives à la suppression définitive.
-                </p>
               </div>
             </div>
           ) : (
