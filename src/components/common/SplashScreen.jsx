@@ -1,146 +1,51 @@
-import { useEffect, useState } from "react";
+// ==========================================
+// FICHIER: src/components/SplashScreen.jsx
+// ✅ VERSION SANS IMAGE — flamme SVG inline, zéro dépendance réseau/cache
+// Ambiance : rouge/noir, flamme animée, particules ember, barre de chargement
+// ==========================================
+import { useEffect, useState } from 'react';
 
 /**
- * FasoGaz — SplashScreen professionnel
+ * SplashScreen FasoGaz
  *
- * Usage dans main.jsx / App.jsx :
- *
- *   import SplashScreen from "./components/SplashScreen";
- *
+ * Usage :
  *   function App() {
- *     const [splashDone, setSplashDone] = useState(false);
- *     return splashDone ? <MainApp /> : <SplashScreen onFinish={() => setSplashDone(true)} />;
+ *     const [done, setDone] = useState(false);
+ *     return done ? <MainApp /> : <SplashScreen onFinish={() => setDone(true)} />;
  *   }
  *
  * Props :
- *   onFinish : () => void   — appelé quand l'animation se termine
- *   duration : number       — durée totale en ms (défaut 2800)
+ *   onFinish : () => void  — appelé à la fin de l'animation
+ *   duration : number      — durée totale en ms (défaut 2800)
  */
-
-// ─────────────────────────────────────────────────────────────────
-// FALLBACK SVG — affiché si l'image PNG ne se charge pas (hors ligne,
-// cache vide, première installation). Entièrement inline → toujours
-// disponible sans réseau ni cache.
-// ─────────────────────────────────────────────────────────────────
-const LogoFallback = () => (
-  <svg
-    viewBox="0 0 120 120"
-    xmlns="http://www.w3.org/2000/svg"
-    style={{
-      position: "absolute",
-      inset: "14px",
-      width: "calc(100% - 28px)",
-      height: "calc(100% - 28px)",
-      filter: "drop-shadow(0 0 14px rgba(220,38,38,.7))",
-    }}
-  >
-    {/* Fond circulaire */}
-    <circle cx="60" cy="60" r="58" fill="#1a0000" />
-
-    {/* Flamme principale */}
-    <path
-      d="M60 20 C60 20 42 38 42 58 C42 72 50 82 60 86
-         C70 82 78 72 78 58 C78 38 60 20 60 20Z"
-      fill="url(#flameMain)"
-    />
-    {/* Flamme intérieure */}
-    <path
-      d="M60 38 C60 38 50 50 50 62 C50 70 54 76 60 78
-         C66 76 70 70 70 62 C70 50 60 38 60 38Z"
-      fill="url(#flameInner)"
-    />
-    {/* Lettre G stylisée */}
-    <text
-      x="60"
-      y="74"
-      textAnchor="middle"
-      fontFamily="'Bebas Neue', 'Arial Black', sans-serif"
-      fontWeight="900"
-      fontSize="28"
-      fill="#fff"
-      opacity="0.9"
-    >
-      G
-    </text>
-
-    {/* Socle / base */}
-    <rect x="44" y="86" width="32" height="5" rx="2.5" fill="url(#baseGrad)" opacity="0.8" />
-
-    <defs>
-      <linearGradient id="flameMain" x1="60" y1="20" x2="60" y2="86" gradientUnits="userSpaceOnUse">
-        <stop offset="0%"   stopColor="#fbbf24" />
-        <stop offset="50%"  stopColor="#f97316" />
-        <stop offset="100%" stopColor="#dc2626" />
-      </linearGradient>
-      <linearGradient id="flameInner" x1="60" y1="38" x2="60" y2="78" gradientUnits="userSpaceOnUse">
-        <stop offset="0%"   stopColor="#fff"    stopOpacity="0.9" />
-        <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.6" />
-      </linearGradient>
-      <linearGradient id="baseGrad" x1="44" y1="0" x2="76" y2="0" gradientUnits="userSpaceOnUse">
-        <stop offset="0%"   stopColor="#f97316" stopOpacity="0" />
-        <stop offset="50%"  stopColor="#fbbf24" />
-        <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
-
-// ─────────────────────────────────────────────────────────────────
-// LogoImage — tente de charger le PNG ; bascule sur SVG si erreur
-// ─────────────────────────────────────────────────────────────────
-const LogoImage = ({ src }) => {
-  const [failed, setFailed] = useState(false);
-
-  if (failed) return <LogoFallback />;
-
-  return (
-    <img
-      className="fg-logo"
-      src={src}
-      alt="FasoGaz logo"
-      onError={() => setFailed(true)}
-      // Si l'image met plus de 4s à charger (réseau lent) → fallback
-      // Le splash dure ~2.8s donc on bascule rapidement
-      style={{
-        position: "absolute",
-        inset: "14px",
-        borderRadius: "50%",
-        objectFit: "contain",
-        padding: "10px",
-        filter: "drop-shadow(0 0 14px rgba(220,38,38,.7))",
-      }}
-    />
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────
-// COMPOSANT PRINCIPAL
-// ─────────────────────────────────────────────────────────────────
 export default function SplashScreen({ onFinish, duration = 2800 }) {
-  const [phase, setPhase] = useState("enter"); // enter | hold | exit
+  const [phase, setPhase] = useState('enter'); // enter | hold | exit
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("hold"),  800);
-    const t2 = setTimeout(() => setPhase("exit"),  duration - 600);
-    const t3 = setTimeout(() => onFinish?.(),       duration);
+    const t1 = setTimeout(() => setPhase('hold'), 800);
+    const t2 = setTimeout(() => setPhase('exit'), duration - 600);
+    const t3 = setTimeout(() => onFinish?.(), duration);
     return () => [t1, t2, t3].forEach(clearTimeout);
   }, [duration, onFinish]);
+
+  // Particules générées de façon déterministe — pas de Math.random()
+  // pour éviter des re-renders différents à chaque montage
+  const particles = Array.from({ length: 18 }, (_, i) => ({
+    id:       i,
+    size:     2 + ((i * 7 + 3) % 5),
+    left:     25 + ((i * 13 + 5) % 50),
+    bottom:   28 + ((i * 11 + 2) % 18),
+    duration: 2.2 + ((i * 3 + 1) % 28) / 10,
+    delay:    ((i * 17 + 7) % 30) / 10,
+    color:    i % 2 === 0 ? '#f97316' : '#fbbf24',
+  }));
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400&display=swap');
 
-        :root {
-          --red:    #dc2626;
-          --red2:   #b91c1c;
-          --ember:  #f97316;
-          --gold:   #fbbf24;
-          --black:  #0a0a0a;
-        }
-
-        /* ── WRAPPER ─────────────────────────── */
-        .fg-splash {
+        .fg2-splash {
           position: fixed;
           inset: 0;
           z-index: 9999;
@@ -148,232 +53,244 @@ export default function SplashScreen({ onFinish, duration = 2800 }) {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 0;
           overflow: hidden;
-          background: linear-gradient(160deg, var(--red2) 0%, #1a0000 55%, var(--black) 100%);
-          transition: opacity 0.55s cubic-bezier(.4,0,.2,1), transform 0.55s cubic-bezier(.4,0,.2,1);
+          background: linear-gradient(170deg, #1a0000 0%, #0a0a0a 60%, #000 100%);
+          transition: opacity .55s cubic-bezier(.4,0,.2,1), transform .55s cubic-bezier(.4,0,.2,1);
         }
-        .fg-splash.exit {
+        .fg2-splash.exit {
           opacity: 0;
           transform: scale(1.04);
           pointer-events: none;
         }
 
-        /* ── GRAIN OVERLAY ───────────────────── */
-        .fg-splash::before {
-          content: '';
+        .fg2-glow {
           position: absolute;
-          inset: 0;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
-          background-size: 180px;
-          opacity: 0.35;
-          pointer-events: none;
-        }
-
-        /* ── RADIAL GLOW ─────────────────────── */
-        .fg-glow {
-          position: absolute;
-          width: 420px;
-          height: 420px;
+          width: 600px; height: 600px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(220,38,38,.35) 0%, transparent 70%);
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -58%);
-          animation: fg-pulse 2.4s ease-in-out infinite;
+          background: radial-gradient(circle, rgba(180,0,0,.18) 0%, transparent 65%);
+          top: 50%; left: 50%;
+          transform: translate(-50%, -60%);
+          animation: fg2-pulse 3s ease-in-out infinite;
         }
-        @keyframes fg-pulse {
-          0%, 100% { opacity: .6; transform: translate(-50%,-58%) scale(1); }
-          50%       { opacity: 1;  transform: translate(-50%,-58%) scale(1.12); }
+        @keyframes fg2-pulse {
+          0%,100% { opacity: .5; transform: translate(-50%,-60%) scale(1);    }
+          50%      { opacity: 1;  transform: translate(-50%,-60%) scale(1.15); }
         }
 
-        /* ── RING ────────────────────────────── */
-        .fg-ring {
-          position: relative;
-          width: 148px;
-          height: 148px;
-          flex-shrink: 0;
-          animation: fg-rise 0.75s cubic-bezier(.22,1,.36,1) both;
-        }
-        @keyframes fg-rise {
-          from { opacity: 0; transform: translateY(28px) scale(.85); }
-          to   { opacity: 1; transform: translateY(0)    scale(1);   }
-        }
-        .fg-ring > svg:first-child {
+        .fg2-particles { position: absolute; inset: 0; pointer-events: none; }
+        .fg2-p {
           position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          animation: fg-spin 6s linear infinite;
+          border-radius: 50%;
+          animation: fg2-rise linear infinite;
+          opacity: 0;
         }
-        @keyframes fg-spin { to { transform: rotate(360deg); } }
-
-        /* ── TEXT BLOCK ──────────────────────── */
-        .fg-text {
-          text-align: center;
-          margin-top: 28px;
-          animation: fg-fadein 0.7s 0.4s cubic-bezier(.22,1,.36,1) both;
-        }
-        @keyframes fg-fadein {
-          from { opacity: 0; transform: translateY(14px); }
-          to   { opacity: 1; transform: translateY(0); }
+        @keyframes fg2-rise {
+          0%   { opacity: 0; transform: translateY(0) scale(1);      }
+          15%  { opacity: .9; }
+          85%  { opacity: .2; }
+          100% { opacity: 0; transform: translateY(-380px) scale(.2); }
         }
 
-        .fg-brand {
+        .fg2-flame {
+          animation: fg2-flicker 2.8s ease-in-out infinite;
+        }
+        @keyframes fg2-flicker {
+          0%,100% { transform: scaleX(1)    scaleY(1);    }
+          25%      { transform: scaleX(.97)  scaleY(1.03); }
+          50%      { transform: scaleX(1.02) scaleY(.98);  }
+          75%      { transform: scaleX(.98)  scaleY(1.02); }
+        }
+
+        .fg2-brand {
           font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(52px, 14vw, 72px);
-          letter-spacing: 0.06em;
+          font-size: clamp(56px, 15vw, 74px);
+          letter-spacing: .1em;
           line-height: 1;
           color: #fff;
-          text-shadow: 0 0 30px rgba(220,38,38,.6), 0 2px 0 rgba(0,0,0,.5);
+          text-shadow: 0 0 60px rgba(220,38,38,.5), 0 0 20px rgba(220,38,38,.3);
+          animation: fg2-up .8s .2s both;
         }
-        .fg-brand span {
-          color: var(--gold);
-          text-shadow: 0 0 24px rgba(251,191,36,.5);
+        .fg2-brand span {
+          color: #fbbf24;
+          text-shadow: 0 0 40px rgba(251,191,36,.4);
         }
 
-        .fg-tagline {
+        .fg2-tag {
           font-family: 'Outfit', sans-serif;
           font-weight: 300;
-          font-size: clamp(12px, 3.5vw, 15px);
-          letter-spacing: 0.22em;
+          font-size: clamp(11px, 3vw, 13px);
+          letter-spacing: .28em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.55);
+          color: rgba(255,255,255,.4);
+          margin-top: 10px;
+          animation: fg2-up .8s .4s both;
+        }
+
+        @keyframes fg2-up {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0);    }
+        }
+
+        .fg2-sep {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-top: 32px;
+          animation: fg2-up .8s .6s both;
+        }
+        .fg2-line {
+          width: 1px;
+          height: 36px;
+          background: linear-gradient(to bottom, transparent, rgba(220,38,38,.55), transparent);
+        }
+        .fg2-dot {
+          width: 4px; height: 4px;
+          border-radius: 50%;
+          background: #dc2626;
           margin-top: 6px;
+          animation: fg2-dot-pulse 1.5s .7s ease-in-out infinite;
+        }
+        @keyframes fg2-dot-pulse {
+          0%,100% { opacity: 1;  transform: scale(1);  }
+          50%      { opacity: .3; transform: scale(.5); }
         }
 
-        /* ── DIVIDER ─────────────────────────── */
-        .fg-divider {
-          width: 60px;
-          height: 2px;
-          margin: 18px auto 0;
-          background: linear-gradient(90deg, transparent, var(--ember), transparent);
-          animation: fg-fadein 0.7s 0.65s both;
-        }
-
-        /* ── LOADER BAR ──────────────────────── */
-        .fg-bar-wrap {
-          margin-top: 38px;
-          width: clamp(160px, 45vw, 220px);
-          height: 3px;
+        .fg2-bar-wrap {
+          width: clamp(140px, 40vw, 190px);
+          height: 1px;
+          background: rgba(255,255,255,.07);
           border-radius: 99px;
-          background: rgba(255,255,255,0.1);
           overflow: hidden;
-          animation: fg-fadein 0.5s 0.7s both;
+          margin-top: 44px;
+          animation: fg2-up .5s .8s both;
         }
-        .fg-bar {
+        .fg2-bar {
           height: 100%;
+          background: linear-gradient(90deg, #7f1d1d, #dc2626, #f97316, #fbbf24);
           border-radius: 99px;
-          background: linear-gradient(90deg, var(--ember), var(--gold));
           transform-origin: left;
+          transform: scaleX(0);
         }
-        @keyframes fg-load {
+        @keyframes fg2-load {
           from { transform: scaleX(0); }
           to   { transform: scaleX(1); }
         }
 
-        /* ── TAGLINE BOTTOM ──────────────────── */
-        .fg-bottom {
+        .fg2-bottom {
           position: absolute;
-          bottom: 36px;
+          bottom: 28px;
           font-family: 'Outfit', sans-serif;
-          font-size: 11px;
-          letter-spacing: 0.18em;
+          font-size: 10px;
+          letter-spacing: .2em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.2);
-          animation: fg-fadein 1s 1s both;
-        }
-
-        /* ── EMBER PARTICLES ─────────────────── */
-        .fg-particles {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          overflow: hidden;
-        }
-        .fg-particle {
-          position: absolute;
-          border-radius: 50%;
-          animation: fg-float linear infinite;
-          opacity: 0;
-        }
-        @keyframes fg-float {
-          0%   { transform: translateY(0)   scale(1);   opacity: 0; }
-          15%  { opacity: .8; }
-          80%  { opacity: .3; }
-          100% { transform: translateY(-320px) scale(0.3); opacity: 0; }
+          color: rgba(255,255,255,.14);
+          animation: fg2-up 1s 1.2s both;
         }
       `}</style>
 
-      <div className={`fg-splash${phase === "exit" ? " exit" : ""}`}>
+      <div className={`fg2-splash${phase === 'exit' ? ' exit' : ''}`}>
 
-        {/* Glow de fond */}
-        <div className="fg-glow" />
+        {/* Halo de fond */}
+        <div className="fg2-glow" />
 
         {/* Particules ember */}
-        <div className="fg-particles">
-          {[...Array(12)].map((_, i) => (
+        <div className="fg2-particles">
+          {particles.map((p) => (
             <div
-              key={i}
-              className="fg-particle"
+              key={p.id}
+              className="fg2-p"
               style={{
-                width:             `${3 + Math.random() * 4}px`,
-                height:            `${3 + Math.random() * 4}px`,
-                left:              `${20 + Math.random() * 60}%`,
-                bottom:            `${30 + Math.random() * 20}%`,
-                animationDuration: `${2 + Math.random() * 2.5}s`,
-                animationDelay:    `${Math.random() * 2}s`,
-                background:        Math.random() > 0.5 ? "#f97316" : "#fbbf24",
+                width:             `${p.size}px`,
+                height:            `${p.size}px`,
+                left:              `${p.left}%`,
+                bottom:            `${p.bottom}%`,
+                background:        p.color,
+                animationDuration: `${p.duration}s`,
+                animationDelay:    `${p.delay}s`,
               }}
             />
           ))}
         </div>
 
-        {/* Logo avec anneau tournant */}
-        <div className="fg-ring">
-          {/* Anneau SVG rotatif */}
-          <svg viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle
-              cx="74" cy="74" r="70"
-              stroke="url(#ringGrad)"
-              strokeWidth="2.5"
-              strokeDasharray="6 10"
-              strokeLinecap="round"
-            />
-            <defs>
-              <linearGradient id="ringGrad" x1="0" y1="0" x2="148" y2="148" gradientUnits="userSpaceOnUse">
-                <stop offset="0%"   stopColor="#f97316" />
-                <stop offset="50%"  stopColor="#fbbf24" />
-                <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-          </svg>
+        {/* Contenu centré */}
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
-          {/* ✅ Logo avec fallback SVG inline si hors ligne ou cache vide */}
-          <LogoImage src="/icons/icon-192x192.png" />
-        </div>
+          {/* ── Flamme SVG — 100% inline, zéro réseau ── */}
+          <div style={{ width: 100, height: 110, marginBottom: 36 }}>
+            <svg
+              className="fg2-flame"
+              viewBox="0 0 100 110"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              width="100"
+              height="110"
+            >
+              <defs>
+                <linearGradient id="fg2f1" x1="50" y1="0" x2="50" y2="110" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%"   stopColor="#fbbf24" />
+                  <stop offset="35%"  stopColor="#f97316" />
+                  <stop offset="70%"  stopColor="#dc2626" />
+                  <stop offset="100%" stopColor="#7f1d1d" />
+                </linearGradient>
+                <linearGradient id="fg2f2" x1="50" y1="20" x2="50" y2="95" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%"   stopColor="#fff"    stopOpacity=".95" />
+                  <stop offset="50%"  stopColor="#fef3c7" stopOpacity=".7"  />
+                  <stop offset="100%" stopColor="#fbbf24" stopOpacity=".3"  />
+                </linearGradient>
+                <linearGradient id="fg2f3" x1="50" y1="50" x2="50" y2="110" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%"   stopColor="#f97316" stopOpacity=".55" />
+                  <stop offset="100%" stopColor="#dc2626" stopOpacity="0"   />
+                </linearGradient>
+              </defs>
 
-        {/* Nom + slogan */}
-        <div className="fg-text">
-          <div className="fg-brand">
-            Faso<span>Gaz</span>
+              {/* Halo à la base */}
+              <ellipse cx="50" cy="105" rx="28" ry="5" fill="url(#fg2f3)" />
+              {/* Corps principal */}
+              <path
+                d="M50 5 C50 5 20 28 18 55 C16 75 28 92 50 100 C72 92 84 75 82 55 C80 28 50 5 50 5Z"
+                fill="url(#fg2f1)"
+              />
+              {/* Couche intermédiaire */}
+              <path
+                d="M50 5 C50 5 35 22 34 42 C33 55 38 65 50 70 C62 65 67 55 66 42 C65 22 50 5 50 5Z"
+                fill="url(#fg2f1)"
+                opacity=".55"
+              />
+              {/* Cœur lumineux */}
+              <path
+                d="M50 18 C50 18 38 32 37 48 C36 58 42 66 50 69 C58 66 64 58 63 48 C62 32 50 18 50 18Z"
+                fill="url(#fg2f2)"
+              />
+              {/* Point chaud base */}
+              <ellipse cx="50" cy="100" rx="10" ry="4" fill="#fbbf24" opacity=".35" />
+            </svg>
           </div>
-          <div className="fg-tagline">Votre gaz à portée de clic</div>
-          <div className="fg-divider" />
-        </div>
 
-        {/* Barre de chargement */}
-        <div className="fg-bar-wrap">
-          <div
-            className="fg-bar"
-            style={{
-              animation: `fg-load ${duration - 400}ms cubic-bezier(.4,0,.2,1) 0.3s both`,
-            }}
-          />
+          {/* Nom */}
+          <div className="fg2-brand">Faso<span>Gaz</span></div>
+
+          {/* Slogan */}
+          <div className="fg2-tag">Votre gaz à portée de clic</div>
+
+          {/* Séparateur */}
+          <div className="fg2-sep">
+            <div className="fg2-line" />
+            <div className="fg2-dot" />
+          </div>
+
+          {/* Barre de chargement */}
+          <div className="fg2-bar-wrap">
+            <div
+              className="fg2-bar"
+              style={{
+                animation: `fg2-load ${duration - 400}ms cubic-bezier(.4,0,.2,1) 0.3s both`,
+              }}
+            />
+          </div>
         </div>
 
         {/* Mention bas de page */}
-        <div className="fg-bottom">Burkina Faso · 100% local</div>
+        <div className="fg2-bottom">Burkina Faso · 100% local</div>
       </div>
     </>
   );
