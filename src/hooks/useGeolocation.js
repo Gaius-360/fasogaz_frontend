@@ -1,6 +1,8 @@
 // ==========================================
 // FICHIER: src/hooks/useGeolocation.js
-// Hook pour le suivi de position en temps réel
+// ✅ FIX 429 : suppression du setInterval redondant (cause principale des bursts)
+// ✅ FIX 429 : debounce 2s sur le callback onPositionChange (→ reverseGeocode)
+// ✅ watchPosition SEULEMENT — pas de polling parallèle
 // ==========================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,93 +10,92 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 /**
  * Hook pour suivre la position géographique en temps réel
  * @param {Object} options - Options de configuration
- * @param {boolean} options.enabled - Activer/désactiver le suivi
- * @param {number} options.updateInterval - Intervalle de mise à jour en ms (défaut: 30000 = 30s)
- * @param {number} options.minDistanceChange - Distance min de changement en mètres pour trigger update (défaut: 50m)
- * @returns {Object} État de géolocalisation
+ * @param {boolean} options.enabled              - Activer/désactiver le suivi
+ * @param {number}  options.minDistanceChange    - Distance min (m) pour déclencher une mise à jour (défaut: 50)
+ * @param {number}  options.geocodeDebounceMs    - Délai debounce avant d'appeler onPositionChange (défaut: 2000ms)
+ * @param {Function} options.onPositionChange    - Callback appelé après déplacement significatif + debounce
  */
 export const useGeolocation = (options = {}) => {
   const {
-    enabled = false,
-    updateInterval = 30000, // 30 secondes par défaut
-    minDistanceChange = 50, // 50 mètres minimum
-    onPositionChange = null
+    enabled           = false,
+    minDistanceChange = 50,      // mètres
+    geocodeDebounceMs = 2000,    // ms — évite les appels geocoding en rafale
+    onPositionChange  = null
   } = options;
 
-  const [position, setPosition] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [position,   setPosition]   = useState(null);
+  const [error,      setError]      = useState(null);
+  const [loading,    setLoading]    = useState(false);
   const [isTracking, setIsTracking] = useState(false);
 
-  const watchIdRef = useRef(null);
+  const watchIdRef      = useRef(null);
   const lastPositionRef = useRef(null);
-  const intervalIdRef = useRef(null);
+  const geocodeTimerRef = useRef(null);   // ✅ debounce timer
+  const onPositionRef   = useRef(onPositionChange);
 
-  /**
-   * Calculer la distance entre deux points GPS (en mètres)
-   */
-  const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
-    const R = 6371000; // Rayon de la Terre en mètres
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance en mètres
+  // Garder la ref à jour sans recréer les callbacks
+  useEffect(() => {
+    onPositionRef.current = onPositionChange;
+  }, [onPositionChange]);
+
+  // ── Distance Haversine (en mètres) ─────────────────────────────────────────
+  const haversineMeters = useCallback((lat1, lon1, lat2, lon2) => {
+    const R    = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a    =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }, []);
 
-  const toRad = (value) => value * Math.PI / 180;
-
-  /**
-   * Gérer une nouvelle position
-   */
+  // ── Gestion d'une nouvelle mesure GPS ──────────────────────────────────────
   const handlePosition = useCallback((geoPosition) => {
-    const newPosition = {
-      latitude: geoPosition.coords.latitude,
+    const newPos = {
+      latitude:  geoPosition.coords.latitude,
       longitude: geoPosition.coords.longitude,
-      accuracy: geoPosition.coords.accuracy,
+      accuracy:  geoPosition.coords.accuracy,
       timestamp: geoPosition.timestamp
     };
 
-    // Vérifier si le changement de position est significatif
+    // Filtrer les déplacements inférieurs au seuil
     if (lastPositionRef.current) {
-      const distance = calculateDistance(
+      const dist = haversineMeters(
         lastPositionRef.current.latitude,
         lastPositionRef.current.longitude,
-        newPosition.latitude,
-        newPosition.longitude
+        newPos.latitude,
+        newPos.longitude
       );
 
-      // Si le déplacement est inférieur au seuil, ignorer
-      if (distance < minDistanceChange) {
-        console.log(`📍 Déplacement trop faible (${distance.toFixed(0)}m < ${minDistanceChange}m)`);
+      if (dist < minDistanceChange) {
+        console.log(`📍 Déplacement ignoré (${dist.toFixed(0)}m < ${minDistanceChange}m)`);
         return;
       }
 
-      console.log(`📍 Déplacement significatif détecté: ${distance.toFixed(0)}m`);
+      console.log(`📍 Déplacement significatif : ${dist.toFixed(0)}m`);
     }
 
-    lastPositionRef.current = newPosition;
-    setPosition(newPosition);
+    lastPositionRef.current = newPos;
+    setPosition(newPos);
     setError(null);
     setLoading(false);
 
-    // Callback externe si fourni
-    if (onPositionChange) {
-      onPositionChange(newPosition);
-    }
-  }, [calculateDistance, minDistanceChange, onPositionChange]);
+    // ✅ Debounce : n'appeler onPositionChange (→ reverseGeocode) qu'après
+    // geocodeDebounceMs ms d'inactivité, pour éviter les bursts si watchPosition
+    // déclenche plusieurs mesures rapprochées (ex. démarrage GPS, bâtiments).
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    geocodeTimerRef.current = setTimeout(() => {
+      if (onPositionRef.current) {
+        onPositionRef.current(newPos);
+      }
+    }, geocodeDebounceMs);
+  }, [haversineMeters, minDistanceChange, geocodeDebounceMs]);
 
-  /**
-   * Gérer les erreurs de géolocalisation
-   */
+  // ── Gestion des erreurs GPS ─────────────────────────────────────────────────
   const handleError = useCallback((geoError) => {
-    let message = 'Erreur de géolocalisation';
-    
+    let message;
     switch (geoError.code) {
       case geoError.PERMISSION_DENIED:
         message = 'Permission de géolocalisation refusée';
@@ -108,20 +109,19 @@ export const useGeolocation = (options = {}) => {
       default:
         message = 'Erreur inconnue de géolocalisation';
     }
-    
+
     console.error('❌ Erreur géolocalisation:', message);
     setError(message);
     setLoading(false);
     setIsTracking(false);
   }, []);
 
-  /**
-   * Obtenir la position actuelle (one-time)
-   */
+  // ── Position ponctuelle (one-shot) ─────────────────────────────────────────
   const getCurrentPosition = useCallback(() => {
     if (!navigator.geolocation) {
-      setError('Géolocalisation non supportée');
-      return Promise.reject(new Error('Géolocalisation non supportée'));
+      const err = new Error('Géolocalisation non supportée');
+      setError(err.message);
+      return Promise.reject(err);
     }
 
     setLoading(true);
@@ -132,27 +132,21 @@ export const useGeolocation = (options = {}) => {
         (pos) => {
           handlePosition(pos);
           resolve({
-            latitude: pos.coords.latitude,
+            latitude:  pos.coords.latitude,
             longitude: pos.coords.longitude,
-            accuracy: pos.coords.accuracy
+            accuracy:  pos.coords.accuracy
           });
         },
         (err) => {
           handleError(err);
           reject(err);
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     });
   }, [handlePosition, handleError]);
 
-  /**
-   * Démarrer le suivi continu
-   */
+  // ── Démarrer le suivi continu ───────────────────────────────────────────────
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
       setError('Géolocalisation non supportée');
@@ -164,60 +158,40 @@ export const useGeolocation = (options = {}) => {
       return;
     }
 
-    console.log('🎯 Démarrage du suivi de position');
+    console.log('🎯 Démarrage du suivi GPS (watchPosition uniquement)');
     setLoading(true);
     setIsTracking(true);
 
-    // Méthode 1: watchPosition (temps réel)
+    // ✅ watchPosition SEULEMENT.
+    // L'ancien setInterval de polling a été supprimé : il dupliquait chaque
+    // mesure GPS et provoquait des bursts de requêtes vers /api/geocoding.
     watchIdRef.current = navigator.geolocation.watchPosition(
       handlePosition,
       handleError,
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+  }, [handlePosition, handleError]);
 
-    // Méthode 2: Polling régulier (backup)
-    // Certains navigateurs/OS ne déclenchent watchPosition qu'avec un grand déplacement
-    intervalIdRef.current = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(
-        handlePosition,
-        () => {}, // Ignorer les erreurs du polling
-        {
-          enableHighAccuracy: true,
-          timeout: 5000,
-          maximumAge: 0
-        }
-      );
-    }, updateInterval);
-
-  }, [handlePosition, handleError, updateInterval]);
-
-  /**
-   * Arrêter le suivi
-   */
+  // ── Arrêter le suivi ────────────────────────────────────────────────────────
   const stopTracking = useCallback(() => {
-    console.log('🛑 Arrêt du suivi de position');
-    
+    console.log('🛑 Arrêt du suivi GPS');
+
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
 
-    if (intervalIdRef.current !== null) {
-      clearInterval(intervalIdRef.current);
-      intervalIdRef.current = null;
+    // Annuler le debounce en cours pour ne pas appeler geocoding après l'arrêt
+    if (geocodeTimerRef.current !== null) {
+      clearTimeout(geocodeTimerRef.current);
+      geocodeTimerRef.current = null;
     }
 
     setIsTracking(false);
     setLoading(false);
   }, []);
 
-  /**
-   * Effet : Démarrer/arrêter le suivi selon l'état 'enabled'
-   */
+  // ── Effet : réagir aux changements de `enabled` ────────────────────────────
   useEffect(() => {
     if (enabled) {
       startTracking();
@@ -225,20 +199,17 @@ export const useGeolocation = (options = {}) => {
       stopTracking();
     }
 
-    // Cleanup à la destruction du composant
-    return () => {
-      stopTracking();
-    };
+    return () => stopTracking();
   }, [enabled, startTracking, stopTracking]);
 
   return {
-    position,           // Position actuelle {latitude, longitude, accuracy, timestamp}
-    error,              // Message d'erreur
-    loading,            // Chargement initial
-    isTracking,         // Suivi actif ou non
-    getCurrentPosition, // Fonction pour obtenir position ponctuelle
-    startTracking,      // Démarrer le suivi manuellement
-    stopTracking        // Arrêter le suivi manuellement
+    position,            // {latitude, longitude, accuracy, timestamp} | null
+    error,               // message d'erreur | null
+    loading,             // true pendant l'acquisition initiale
+    isTracking,          // true si watchPosition actif
+    getCurrentPosition,  // obtenir position ponctuelle
+    startTracking,       // démarrer le suivi manuellement
+    stopTracking         // arrêter le suivi manuellement
   };
 };
 

@@ -4,6 +4,8 @@
 //    Sans abonnement → 3 revendeurs visibles (ville du client uniquement) + bannière
 //    Avec abonnement → tous les revendeurs + filtre ville (Ouaga / Bobo / Toutes)
 //    Suppression: système accès 24h, AccessPurchaseModal, showAccessModal
+// ✅ FIX 429 : navigator.geolocation.getCurrentPosition direct remplacé par
+//             getCurrentPosition de helpers.js (multi-mesures + cache geocoding)
 // ==========================================
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +23,7 @@ import Alert from '../../components/common/Alert';
 import { api } from '../../api/apiSwitch';
 import useAuthStore from '../../store/authStore';
 import { useGeolocationContext } from '../../contexts/GeolocationContext';
-import { openNavigationToLocation } from '../../utils/helpers';
+import { openNavigationToLocation, getCurrentPosition } from '../../utils/helpers';
 
 // ── Villes disponibles ────────────────────────────────────────────────────────
 const AVAILABLE_CITIES = ['Ouagadougou', 'Bobo-Dioulasso'];
@@ -269,19 +271,10 @@ const MapPage = () => {
     || null;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-
-  /**
-   * Retourne la ville à utiliser dans la recherche selon l'abonnement.
-   * - Non-abonné : ville du client (forcée)
-   * - Abonné avec filtre '' : on envoie '' → backend retourne toutes les villes
-   * - Abonné avec filtre ville : on envoie la ville choisie
-   */
   const getSearchCity = useCallback((overrideCity) => {
     if (accessStatus.hasAccess) {
-      // '' envoyé tel quel → backend comprend "toutes les villes"
       return overrideCity !== undefined ? overrideCity : selectedCity;
     }
-    // Non-abonné : toujours sa propre ville
     return user?.city || '';
   }, [accessStatus.hasAccess, selectedCity, user?.city]);
 
@@ -355,9 +348,6 @@ const MapPage = () => {
       isSearchingRef.current = true;
       const params = {};
 
-      // ✅ city peut être '' (abonné, toutes villes) ou une ville précise
-      //    Si '' → on ne l'envoie pas → backend détecte l'absence et retourne tout
-      //    Si ville précise → on l'envoie
       const city = searchFilters.city !== undefined ? searchFilters.city : '';
       if (city) params.city = city;
 
@@ -376,7 +366,6 @@ const MapPage = () => {
         const sellersData = response.data.sellers  || [];
         const accessInfo  = response.data.accessInfo || {};
 
-        // ✅ Mettre à jour accessStatus depuis la réponse
         if (accessInfo.hasAccess !== undefined) {
           setAccessStatus(prev => ({
             ...prev,
@@ -475,6 +464,9 @@ const MapPage = () => {
     setAlert({ type: 'success', message: `📍 Résultats mis à jour pour « ${address.label} »` });
   }, [filters, searchProducts, getSearchCity]);
 
+  // ✅ FIX : remplace navigator.geolocation.getCurrentPosition direct
+  //          par getCurrentPosition de helpers.js
+  //          → multi-mesures + cache géocodage + gestion d'erreurs unifiée
   const handleToggleTracking = useCallback(async () => {
     if (trackingMode) {
       disableTracking();
@@ -502,25 +494,21 @@ const MapPage = () => {
     } else {
       try {
         setAlert({ type: 'info', message: '📡 Obtention de votre position GPS...' });
-        const currentPos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(
-            (p) => resolve({
-              latitude:  p.coords.latitude,
-              longitude: p.coords.longitude,
-              accuracy:  p.coords.accuracy
-            }),
-            (e) => reject(e),
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-          );
-        });
+
+        // ✅ getCurrentPosition de helpers.js :
+        //    multi-mesures, retient la plus précise, géocodage avec cache 1h
+        const currentPos = await getCurrentPosition();
+
         setUserLocation(currentPos);
         setLastSearchPosition(currentPos);
+
         await searchProducts({
           ...filters,
           latitude:  currentPos.latitude,
           longitude: currentPos.longitude,
           city:      getSearchCity()
         }, true);
+
         enableTracking((newPosition) => {
           if (lastSearchPosition) {
             const dist = calculateDistance(
@@ -540,22 +528,22 @@ const MapPage = () => {
             city:      getSearchCity()
           }, true);
         });
+
         setTrackingMode(true);
         trackingModeRef.current = true;
+
         const alreadySeen = localStorage.getItem(GPS_ONBOARDING_KEY);
         if (!alreadySeen) {
           setShowGpsOnboarding(true);
           localStorage.setItem(GPS_ONBOARDING_KEY, 'true');
           setTimeout(() => setShowGpsOnboarding(false), 5000);
         }
+
         setAlert({ type: 'success', message: '🎯 Suivi GPS activé' });
+
       } catch (gpsError) {
-        const msg =
-          gpsError.code === 1 ? '❌ Permission GPS refusée'
-          : gpsError.code === 2 ? '❌ Position GPS non disponible'
-          : gpsError.code === 3 ? '❌ Délai GPS dépassé'
-          : "❌ Impossible d'obtenir votre position GPS";
-        setAlert({ type: 'error', message: msg });
+        // getCurrentPosition de helpers.js produit déjà des messages clairs
+        setAlert({ type: 'error', message: `❌ ${gpsError.message}` });
       }
     }
   }, [
@@ -579,16 +567,15 @@ const MapPage = () => {
     }, true);
   };
 
-  const handleCall     = (phone)         => window.location.href = `tel:${phone}`;
+  const handleCall     = (phone) => window.location.href = `tel:${phone}`;
   const handleNavigate = (seller, userLoc) => {
     const lat = seller.latitude  ? parseFloat(seller.latitude)  : null;
     const lon = seller.longitude ? parseFloat(seller.longitude) : null;
     if (lat && lon) {
-      const loc = userLoc || userLocation;
       openNavigationToLocation(
         lat, lon,
         seller.businessName || `Dépôt ${seller.quarter || seller.city}`,
-        loc
+        userLoc || userLocation
       );
     } else {
       setAlert({ type: 'error', message: 'Coordonnées GPS du revendeur non disponibles' });
