@@ -2,16 +2,18 @@
 // FICHIER: src/utils/geocoding.js
 // ✅ FIX CORS  : appel via backend
 // ✅ FIX 429   : file d'attente client (1 appel à la fois, délai 1.2s)
-//               évite les bursts quand plusieurs composants se montent ensemble
-// ✅ FIX 429   : retry backoff 3s/6s/12s (au lieu de 2s/4s)
+// ✅ FIX 429   : retry backoff 3s/6s/12s
 // ✅ FIX 429   : cache client 1h avec clé arrondie à ~100m
+// ✅ FIX RÉSEAU: détection rapide ERR_NETWORK / ERR_NAME_NOT_RESOLVED
+// ✅ FIX SHAPE : userApi intercepteur retourne response.data directement
+//               → après await userApi.get(...) on obtient le body JSON
+//                 { success, data, ... } et NON pas axios { data: { ... } }
 // ==========================================
 
 import userApi from '../api/apiSwitch';
 import { cleanAndValidateQuarterName } from '../data/quarterNameCorrections.js';
 
 // ── Cache côté client (LRU manuel, max 100 entrées, TTL 1h) ──────────────────
-// Arrondi à 3 décimales ≈ 111m — suffisant pour un quartier
 const CLIENT_CACHE     = new Map();
 const CLIENT_CACHE_TTL = 60 * 60 * 1000; // 1 heure
 
@@ -37,18 +39,55 @@ function clientCacheSet(key, data) {
   CLIENT_CACHE.set(key, { data, ts: Date.now() });
 }
 
-// ── File d'attente client : 1 seul appel réseau geocoding à la fois ──────────
-// Problème résolu : quand plusieurs composants se montent simultanément
-// (MapPage + AddAddressModal + Products...), ils appellent tous reverseGeocode
-// en même temps → burst → 429. La file sérialise ces appels avec un délai
-// de 1.2s entre chaque, exactement comme nominatimQueue côté serveur.
-// Les hits de cache court-circuitent la file → pas de délai pour eux.
-let   clientQueue    = Promise.resolve();
-const CLIENT_DELAY   = 1200; // ms entre deux appels réseau (respecte limite Nominatim)
+// ── Résultat dégradé standardisé ─────────────────────────────────────────────
+function buildNetworkFallback(message = 'Backend indisponible') {
+  return {
+    success:        false,
+    error:          message,
+    quarter:        null,
+    city:           null,
+    isNetworkError: true,
+  };
+}
+
+// ── Détection d'erreur réseau ─────────────────────────────────────────────────
+function isNetworkError(error) {
+  return (
+    error?.code === 'ERR_NETWORK'           ||
+    error?.code === 'ERR_NAME_NOT_RESOLVED' ||
+    error?.code === 'ECONNABORTED'          ||
+    error?.isBackendDown === true           ||
+    error?.isNetworkError === true          ||
+    (!error?.response && !!error?.request)
+  );
+}
+
+// ── File d'attente client ─────────────────────────────────────────────────────
+let   clientQueue  = Promise.resolve();
+const CLIENT_DELAY = 1200;
+
+let backendKnownDown = false;
+let backendDownTimer = null;
+const GEOCODE_DOWN_RESET = 60_000;
+
+function markGeocodeBackendDown() {
+  backendKnownDown = true;
+  if (backendDownTimer) clearTimeout(backendDownTimer);
+  backendDownTimer = setTimeout(() => {
+    backendKnownDown = false;
+    backendDownTimer = null;
+    console.log('🔄 [geocoding] Réessai backend autorisé');
+  }, GEOCODE_DOWN_RESET);
+}
 
 function enqueueGeocode(fn) {
   clientQueue = clientQueue
-    .then(() => fn())
+    .then(() => {
+      if (backendKnownDown) {
+        return buildNetworkFallback('Backend indisponible (court-circuit file)');
+      }
+      return fn();
+    })
     .then(result =>
       new Promise(resolve => setTimeout(() => resolve(result), CLIENT_DELAY))
     )
@@ -58,20 +97,19 @@ function enqueueGeocode(fn) {
   return clientQueue;
 }
 
-// ── Helper : attente async ────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Géocodage inversé via le backend (évite CORS + gère le rate limiting Nominatim)
+ * Géocodage inversé via le backend.
  *
- * Stratégie :
- *  1. Cache client 1h → retour immédiat si position déjà connue
- *  2. File d'attente client → 1 seul appel réseau à la fois, délai 1.2s
- *  3. Retry backoff exponentiel → 3s, 6s, 12s sur erreur 429
+ * ⚠️  userApi (export default de apiSwitch.js) a un intercepteur response qui
+ *     retourne response.data directement. Donc :
+ *       const body = await userApi.get('/geocoding/multi-zoom', ...)
+ *     body === response.data === { success: true, data: { address, zoom, ... } }
  *
  * @param {number} latitude
  * @param {number} longitude
- * @param {number} maxRetries  — tentatives max sur 429 (défaut: 3)
+ * @param {number} maxRetries
  * @returns {Promise<Object>}
  */
 export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
@@ -80,16 +118,23 @@ export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
 
   if (cached) {
     console.log(`🗂️ Cache client hit: ${key}`);
-    return cached; // court-circuite la file, retour immédiat
+    return cached;
   }
 
-  // Sérialiser via la file d'attente pour éviter les bursts
+  if (backendKnownDown) {
+    console.warn('⚡ [geocoding] Backend down — court-circuit immédiat');
+    return buildNetworkFallback('Backend indisponible');
+  }
+
   return enqueueGeocode(async () => {
-    // Double-check cache : un autre appel en file a peut-être déjà rempli le cache
     const cachedAgain = clientCacheGet(key);
     if (cachedAgain) {
       console.log(`🗂️ Cache client hit (post-queue): ${key}`);
       return cachedAgain;
+    }
+
+    if (backendKnownDown) {
+      return buildNetworkFallback('Backend indisponible (détecté pendant attente file)');
     }
 
     let lastError;
@@ -97,7 +142,6 @@ export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          // Backoff plus long qu'avant : 3s, 6s, 12s
           const delay = Math.pow(2, attempt) * 1500;
           console.log(`⏳ Retry géocodage dans ${delay}ms (tentative ${attempt}/${maxRetries})...`);
           await sleep(delay);
@@ -105,24 +149,28 @@ export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
 
         console.log(`📍 Géocodage inversé via backend: ${latitude}, ${longitude}`);
 
-        const response = await userApi.get('/geocoding/multi-zoom', {
+        // ✅ userApi retourne response.data directement (intercepteur apiSwitch.js)
+        // body = { success: true, data: { address: {}, display_name, zoom } }
+        const body = await userApi.get('/geocoding/multi-zoom', {
           params: { lat: latitude, lon: longitude }
         });
 
-        if (!response.success || !response.data) {
+        if (!body?.success || !body?.data) {
           console.warn('⚠️ Aucune donnée de géocodage reçue');
           const fallback = {
             success:     true,
             quarter:     null,
             city:        'Ouagadougou',
             fullAddress: 'Ouagadougou',
-            warning:     'Aucun quartier trouvé'
+            warning:     'Aucun quartier trouvé',
           };
           clientCacheSet(key, fallback);
           return fallback;
         }
 
-        const address = response.data.address || {};
+        // body.data = objet Nominatim enrichi par geocodingRoutes.js
+        const nominatim = body.data;
+        const address   = nominatim.address || {};
 
         const rawQuarter =
           address.suburb        ||
@@ -146,13 +194,13 @@ export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
           address.municipality ||
           'Ouagadougou';
 
-        console.log('✅ Géocodage réussi:', { quarter, city, zoom: response.data.zoom });
+        console.log('✅ Géocodage réussi:', { quarter, city, zoom: nominatim.zoom });
 
         const result = {
           success:     true,
           quarter,
           city,
-          fullAddress: response.data.display_name || `${quarter || ''}, ${city}`.trim(),
+          fullAddress: nominatim.display_name || `${quarter || ''}, ${city}`.trim(),
           details: {
             road:          address.road          || '',
             suburb:        address.suburb        || '',
@@ -160,7 +208,7 @@ export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
             city_district: address.city_district || '',
             postcode:      address.postcode      || '',
             country:       address.country       || 'Burkina Faso',
-            zoom:          response.data.zoom,
+            zoom:          nominatim.zoom,
           },
           raw: address,
         };
@@ -171,18 +219,29 @@ export const reverseGeocode = async (latitude, longitude, maxRetries = 3) => {
       } catch (error) {
         lastError = error;
 
+        // ── Erreur réseau → retour dégradé immédiat, pas de retry ────────
+        if (isNetworkError(error)) {
+          console.error('🔴 [geocoding] Erreur réseau:', error.code || error.message);
+          markGeocodeBackendDown();
+          return buildNetworkFallback(
+            error.userMessage || 'Backend indisponible. Réessayez dans quelques instants.'
+          );
+        }
+
         const status = error?.response?.status || error?.status;
+
+        // ── 429 → retry avec backoff ──────────────────────────────────────
         if (status === 429 && attempt < maxRetries) {
           console.warn(`⚠️ Géocodage 429 — backoff avant retry ${attempt + 1}/${maxRetries}`);
           continue;
         }
 
+        // Autre erreur HTTP → sortie sans retry
         break;
       }
     }
 
-    // Tous les retries épuisés — retour dégradé sans lever d'exception
-    console.error('❌ Erreur géocodage backend après retries:', lastError);
+    console.error('❌ Erreur géocodage backend après retries:', lastError?.message);
     return {
       success: false,
       error:   lastError?.message || 'Erreur de géocodage',
@@ -209,7 +268,9 @@ export const validateLocationInSupportedCity = async (latitude, longitude) => {
   if (!result.success) {
     return {
       valid:   false,
-      message: 'Impossible de vérifier votre localisation'
+      message: result.isNetworkError
+        ? 'Service de localisation temporairement indisponible'
+        : 'Impossible de vérifier votre localisation',
     };
   }
 
