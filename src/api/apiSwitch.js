@@ -3,6 +3,9 @@
 // ✅ CORRECTIONS :
 //    1. adminAuth.login envoie { email, password } (plus username)
 //    2. Redirection 401 admin → bonne URL secrète
+//    3. ✅ FIX 429 : intercepteur userApi attache error.response?.status
+//       à l'objet rejeté → geocoding.js peut détecter le 429 et ouvrir
+//       le circuit breaker (sans ce fix, status === null, circuit jamais ouvert)
 // ==========================================
 
 import axios from 'axios';
@@ -66,7 +69,18 @@ userApi.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    return Promise.reject(error.response?.data || error);
+
+    // ✅ FIX 429 : l'intercepteur rejetait error.response?.data (le JSON du backend)
+    // sans y attacher le code HTTP. Du coup, dans geocoding.js, getStatusCode()
+    // recevait { success: false, message: '...' } sans .status → retournait null
+    // → if (status === 429) ne se déclenchait jamais → circuit breaker aveugle
+    // → appels continuaient en boucle malgré le 429.
+    //
+    // Fix : on enrichit l'objet rejeté avec le status HTTP avant de le propager.
+    const enrichedError = error.response?.data || error;
+    enrichedError.status = error.response?.status ?? enrichedError.status ?? null;
+
+    return Promise.reject(enrichedError);
   }
 );
 
@@ -140,13 +154,13 @@ export const api = {
   // PRODUCTS
   // ==========================================
   products: {
-    searchProducts:  (params)   => userApi.get('/products/search', { params }),
-    getSellerProducts: (sellerId) => userApi.get(`/products/seller/${sellerId}`),
-    createProduct:   (data)     => userApi.post('/products', data),
-    getMyProducts:   ()         => userApi.get('/products/my-products'),
-    updateProduct:   (id, data) => userApi.put(`/products/${id}`, data),
-    deleteProduct:   (id)       => userApi.delete(`/products/${id}`),
-    incrementView:   (id)       => userApi.post(`/products/${id}/view`),
+    searchProducts:    (params)     => userApi.get('/products/search', { params }),
+    getSellerProducts: (sellerId)   => userApi.get(`/products/seller/${sellerId}`),
+    createProduct:     (data)       => userApi.post('/products', data),
+    getMyProducts:     ()           => userApi.get('/products/my-products'),
+    updateProduct:     (id, data)   => userApi.put(`/products/${id}`, data),
+    deleteProduct:     (id)         => userApi.delete(`/products/${id}`),
+    incrementView:     (id)         => userApi.post(`/products/${id}/view`),
   },
 
   // ==========================================
@@ -163,35 +177,35 @@ export const api = {
   // SUBSCRIPTIONS (REVENDEURS)
   // ==========================================
   subscriptions: {
-    getPlans:            ()     => userApi.get('/subscriptions/plans'),
-    createSubscription:  (data) => userApi.post('/subscriptions', data),
-    getMySubscription:   ()     => userApi.get('/subscriptions/my-subscription'),
-    earlyRenewal:        (data) => userApi.put('/subscriptions/early-renewal', data),
-    deleteSubscription:  ()     => userApi.delete('/subscriptions'),
-    renewSubscription:   (data) => userApi.put('/subscriptions/renew', data),
+    getPlans:           ()     => userApi.get('/subscriptions/plans'),
+    createSubscription: (data) => userApi.post('/subscriptions', data),
+    getMySubscription:  ()     => userApi.get('/subscriptions/my-subscription'),
+    earlyRenewal:       (data) => userApi.put('/subscriptions/early-renewal', data),
+    deleteSubscription: ()     => userApi.delete('/subscriptions'),
+    renewSubscription:  (data) => userApi.put('/subscriptions/renew', data),
   },
 
   // ==========================================
   // ADDRESSES
   // ==========================================
   addresses: {
-    createAddress:    (data)     => userApi.post('/addresses', data),
-    getMyAddresses:   ()         => userApi.get('/addresses'),
-    getAddressById:   (id)       => userApi.get(`/addresses/${id}`),
-    updateAddress:    (id, data) => userApi.put(`/addresses/${id}`, data),
-    deleteAddress:    (id)       => userApi.delete(`/addresses/${id}`),
-    setDefaultAddress:(id)       => userApi.put(`/addresses/${id}/set-default`),
+    createAddress:     (data)     => userApi.post('/addresses', data),
+    getMyAddresses:    ()         => userApi.get('/addresses'),
+    getAddressById:    (id)       => userApi.get(`/addresses/${id}`),
+    updateAddress:     (id, data) => userApi.put(`/addresses/${id}`, data),
+    deleteAddress:     (id)       => userApi.delete(`/addresses/${id}`),
+    setDefaultAddress: (id)       => userApi.put(`/addresses/${id}/set-default`),
   },
 
   // ==========================================
   // REVIEWS
   // ==========================================
   reviews: {
-    createReview:      (data)            => userApi.post('/reviews', data),
-    getMyReviews:      ()                => userApi.get('/reviews/my-reviews'),
-    getSellerReviews:  (sellerId, params) => userApi.get(`/reviews/seller/${sellerId}`, { params }),
-    getReceivedReviews:()                => userApi.get('/reviews/received'),
-    respondToReview:   (id, data)        => userApi.put(`/reviews/${id}/respond`, data),
+    createReview:       (data)             => userApi.post('/reviews', data),
+    getMyReviews:       ()                 => userApi.get('/reviews/my-reviews'),
+    getSellerReviews:   (sellerId, params) => userApi.get(`/reviews/seller/${sellerId}`, { params }),
+    getReceivedReviews: ()                 => userApi.get('/reviews/received'),
+    respondToReview:    (id, data)         => userApi.put(`/reviews/${id}/respond`, data),
   },
 
   // ==========================================
@@ -238,9 +252,9 @@ export const api = {
   admin: {
 
     wallet: {
-      getBalance:   ()                       => adminApi.get('/admin/wallet/balance'),
-      getWithdrawals: ()                     => adminApi.get('/admin/wallet/withdrawals'),
-      withdraw:     (amount, method, details) =>
+      getBalance:     ()                        => adminApi.get('/admin/wallet/balance'),
+      getWithdrawals: ()                        => adminApi.get('/admin/wallet/withdrawals'),
+      withdraw:       (amount, method, details) =>
         adminApi.post('/admin/wallet/withdraw', { amount, method, details }),
     },
 
@@ -266,15 +280,15 @@ export const api = {
     },
 
     sellers: {
-      getAll:         (params)            => adminApi.get('/admin/sellers', { params }),
-      getById:        (id)                => adminApi.get(`/admin/sellers/${id}`),
-      getPending:     ()                  => adminApi.get('/admin/sellers/pending'),
-      validate:       (id, message)       => adminApi.put(`/admin/sellers/${id}/validate`, { message }),
-      reject:         (id, reason, msg)   => adminApi.put(`/admin/sellers/${id}/reject`, { reason, message: msg }),
-      suspend:        (id, reason, dur)   => adminApi.put(`/admin/sellers/${id}/suspend`, { reason, duration: dur }),
-      reactivate:     (id)                => adminApi.put(`/admin/sellers/${id}/reactivate`),
-      delete:         (id)                => adminApi.delete(`/admin/sellers/${id}`),
-      resetPassword:  (id, newPassword)   => adminApi.put(`/admin/users/${id}/reset-password`, { newPassword }),
+      getAll:        (params)          => adminApi.get('/admin/sellers', { params }),
+      getById:       (id)              => adminApi.get(`/admin/sellers/${id}`),
+      getPending:    ()                => adminApi.get('/admin/sellers/pending'),
+      validate:      (id, message)     => adminApi.put(`/admin/sellers/${id}/validate`, { message }),
+      reject:        (id, reason, msg) => adminApi.put(`/admin/sellers/${id}/reject`, { reason, message: msg }),
+      suspend:       (id, reason, dur) => adminApi.put(`/admin/sellers/${id}/suspend`, { reason, duration: dur }),
+      reactivate:    (id)              => adminApi.put(`/admin/sellers/${id}/reactivate`),
+      delete:        (id)              => adminApi.delete(`/admin/sellers/${id}`),
+      resetPassword: (id, newPassword) => adminApi.put(`/admin/users/${id}/reset-password`, { newPassword }),
     },
 
     clients: {
@@ -287,13 +301,13 @@ export const api = {
     },
 
     agents: {
-      getAll:         (params)     => adminApi.get('/admin/agents', { params }),
-      getById:        (id)         => adminApi.get(`/admin/agents/${id}`),
-      create:         (data)       => adminApi.post('/admin/agents', data),
-      update:         (id, data)   => adminApi.put(`/admin/agents/${id}`, data),
-      toggleStatus:   (id)         => adminApi.put(`/admin/agents/${id}/toggle-status`),
-      delete:         (id)         => adminApi.delete(`/admin/agents/${id}`),
-      regenerateCode: (id)         => adminApi.put(`/admin/agents/${id}/regenerate-code`),
+      getAll:         (params)   => adminApi.get('/admin/agents', { params }),
+      getById:        (id)       => adminApi.get(`/admin/agents/${id}`),
+      create:         (data)     => adminApi.post('/admin/agents', data),
+      update:         (id, data) => adminApi.put(`/admin/agents/${id}`, data),
+      toggleStatus:   (id)       => adminApi.put(`/admin/agents/${id}/toggle-status`),
+      delete:         (id)       => adminApi.delete(`/admin/agents/${id}`),
+      regenerateCode: (id)       => adminApi.put(`/admin/agents/${id}/regenerate-code`),
     },
   },
 
@@ -311,9 +325,9 @@ export const api = {
   // PRICING — Config publique
   // ==========================================
   pricing: {
-    getClientConfig:   () => userApi.get('/pricing/client'),
-    getRevendeurConfig:() => userApi.get('/pricing/revendeur'),
-    getAccessStatus:   () => userApi.get('/pricing/status'),
+    getClientConfig:    () => userApi.get('/pricing/client'),
+    getRevendeurConfig: () => userApi.get('/pricing/revendeur'),
+    getAccessStatus:    () => userApi.get('/pricing/status'),
   },
 
   // ==========================================
@@ -346,9 +360,9 @@ export const api = {
   // PAIEMENTS LIGDICASH
   // ==========================================
   payments: {
-    initiatePayment:  (data)              => userApi.post('/payments/initiate', data),
-    checkStatus:      (transactionNumber) => userApi.get(`/payments/status/${transactionNumber}`),
-    handleCallback:   (data)              => userApi.post('/payments/ligdicash/callback', data),
+    initiatePayment: (data)              => userApi.post('/payments/initiate', data),
+    checkStatus:     (transactionNumber) => userApi.get(`/payments/status/${transactionNumber}`),
+    handleCallback:  (data)              => userApi.post('/payments/ligdicash/callback', data),
   },
 };
 

@@ -5,8 +5,22 @@
 //    - Clé de cache arrondie à ~1km (3 → 2 décimales) pour maximiser les hits
 //    - File d'attente stricte : 1 appel réseau à la fois, délai 1.5s
 //    - Sur 429 : PAS de retry (ça empire) → retour dégradé immédiat
-//      + backendKnownDown pendant 5 min pour bloquer tous les appels suivants
+//      + circuit breaker pendant 5 min pour bloquer tous les appels suivants
 //    - Sur ERR_NETWORK : même comportement, blocage 1 min
+//
+// ✅ FIX INTERCEPTEUR (apiSwitch.js) :
+//    L'intercepteur userApi rejetait error.response?.data (le JSON du backend)
+//    sans y attacher le code HTTP. getStatusCode() recevait alors un objet
+//    sans .response.status et retournait null → if (status === 429) ne se
+//    déclenchait jamais → circuit breaker aveugle → boucle de 429.
+//
+//    Correction dans apiSwitch.js :
+//      const enrichedError = error.response?.data || error;
+//      enrichedError.status = error.response?.status ?? enrichedError.status ?? null;
+//      return Promise.reject(enrichedError);
+//
+//    getStatusCode() lit désormais error.status en priorité pour couvrir
+//    les deux cas : objet Axios brut ET objet JSON enrichi par l'intercepteur.
 // ==========================================
 
 import userApi from '../api/apiSwitch';
@@ -64,20 +78,25 @@ function isNetworkError(error) {
   );
 }
 
+// ✅ FIX : lire error.status EN PREMIER (objet enrichi par l'intercepteur apiSwitch.js)
+// puis error.response?.status (objet Axios brut si l'intercepteur est bypassé),
+// puis error.statusCode (certaines libs alternatives).
+// Avant ce fix, error.response?.status était lu en premier : il était toujours
+// undefined sur un objet JSON du backend → retournait null → 429 non détecté.
 function getStatusCode(error) {
   return (
-    error?.response?.status ||
-    error?.status           ||
-    error?.statusCode       ||
+    error?.status           ||   // ✅ objet enrichi par l'intercepteur (Fix principal)
+    error?.response?.status ||   // objet Axios brut (si intercepteur bypassé)
+    error?.statusCode       ||   // certaines libs utilisent statusCode
     null
   );
 }
 
 // ── Circuit breaker partagé ───────────────────────────────────────────────────
 // Un seul état pour ERR_NETWORK ET 429 — les deux signifient "ne pas appeler".
-let circuitOpen      = false;
-let circuitTimer     = null;
-let circuitReason    = null;
+let circuitOpen   = false;
+let circuitTimer  = null;
+let circuitReason = null;
 
 function openCircuit(reason, durationMs) {
   circuitOpen   = true;
@@ -110,8 +129,6 @@ function enqueueGeocode(fn) {
     .catch(err   => new Promise((_, reject) => setTimeout(() => reject(err), CLIENT_DELAY)));
   return clientQueue;
 }
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Géocodage inversé via le backend.
@@ -219,6 +236,9 @@ export const reverseGeocode = async (latitude, longitude) => {
       return result;
 
     } catch (error) {
+      // ✅ FIX : getStatusCode lit error.status en premier (enrichi par l'intercepteur)
+      // Avant le fix de apiSwitch.js, cette valeur était toujours null sur un 429,
+      // ce qui empêchait le circuit breaker de s'ouvrir → boucle infinie de 429.
       const status = getStatusCode(error);
 
       // ── 429 : JAMAIS de retry — ouvre le circuit 5 min ───────────────
