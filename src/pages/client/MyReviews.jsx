@@ -1,6 +1,8 @@
 // ==========================================
 // FICHIER: src/pages/client/MyReviews.jsx
-// Page pour voir tous les avis donnés par le client
+// ✅ FIX : l'intercepteur userApi unwrap déjà response.data
+//    → la réponse est directement { success, message, data: [...] }
+//    → reviews = response.data (et non response.data.data)
 // ==========================================
 
 import React, { useState, useEffect } from 'react';
@@ -24,9 +26,17 @@ const MyReviews = () => {
   const loadReviews = async () => {
     try {
       setLoading(true);
+      // L'intercepteur userApi retourne déjà response.data (le corps JSON)
+      // Structure : { success: true, message: '...', data: [...] }
       const response = await api.reviews.getMyReviews();
-      console.log('📝 Mes avis:', response);
-      setReviews(response.data || []);
+      console.log('📝 Mes avis (réponse brute):', response);
+
+      // ✅ FIX : response EST déjà le corps JSON — pas response.data
+      const reviewsData = Array.isArray(response.data)
+        ? response.data
+        : [];
+
+      setReviews(reviewsData);
     } catch (error) {
       console.error('❌ Erreur chargement avis:', error);
       setAlert({
@@ -38,29 +48,21 @@ const MyReviews = () => {
     }
   };
 
-  const renderStars = (rating) => {
-    return (
-      <div className="flex items-center gap-1">
-        {Array.from({ length: 5 }, (_, i) => (
-          <Star
-            key={i}
-            className={`h-5 w-5 ${
-              i < rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
-            }`}
-          />
-        ))}
-      </div>
-    );
-  };
+  const renderStars = (rating) => (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          className={`h-5 w-5 ${
+            i < rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+          }`}
+        />
+      ))}
+    </div>
+  );
 
   const getRatingLabel = (rating) => {
-    const labels = {
-      1: 'Très décevant',
-      2: 'Décevant',
-      3: 'Moyen',
-      4: 'Bien',
-      5: 'Excellent'
-    };
+    const labels = { 1: 'Très décevant', 2: 'Décevant', 3: 'Moyen', 4: 'Bien', 5: 'Excellent' };
     return labels[rating] || '';
   };
 
@@ -79,17 +81,11 @@ const MyReviews = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate(-1)}
-        >
+        <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            Mes Avis
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Mes Avis</h1>
           <p className="text-gray-600">
             {reviews.length} avis donné{reviews.length > 1 ? 's' : ''}
           </p>
@@ -114,17 +110,17 @@ const MyReviews = () => {
           <p className="text-gray-600 mb-6">
             Vous pourrez donner un avis après avoir reçu vos commandes
           </p>
-          <Button
-            variant="primary"
-            onClick={() => navigate('/client/orders')}
-          >
+          <Button variant="primary" onClick={() => navigate('/client/orders')}>
             Voir mes commandes
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
           {reviews.map((review) => (
-            <div key={review.id} className="bg-white rounded-lg border shadow-sm overflow-hidden">
+            <div
+              key={review.id}
+              className="bg-white rounded-lg border shadow-sm overflow-hidden"
+            >
               {/* En-tête avec info revendeur */}
               <div className="bg-gray-50 px-6 py-4 border-b">
                 <div className="flex items-start justify-between">
@@ -149,8 +145,17 @@ const MyReviews = () => {
               </div>
 
               <div className="p-6">
-                {/* Mon avis */}
-                {review.comment && (
+                {/* Produit concerné (avis de type 'product') */}
+                {review.reviewType === 'product' && review.product && (
+                  <div className="mb-3 inline-flex items-center gap-1.5 bg-orange-50 border border-orange-200 rounded-full px-3 py-1">
+                    <span className="text-xs font-medium text-orange-800">
+                      {review.product.brand} {review.product.bottleType}
+                    </span>
+                  </div>
+                )}
+
+                {/* Mon commentaire */}
+                {review.comment ? (
                   <div className="mb-4">
                     <p className="text-sm font-medium text-gray-700 mb-2">
                       Mon avis :
@@ -159,9 +164,7 @@ const MyReviews = () => {
                       "{review.comment}"
                     </p>
                   </div>
-                )}
-
-                {!review.comment && (
+                ) : (
                   <div className="mb-4">
                     <p className="text-sm text-gray-500 italic">
                       Vous n'avez pas laissé de commentaire
@@ -213,7 +216,7 @@ const MyReviews = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate(`/client/orders`)}
+                    onClick={() => navigate('/client/orders')}
                   >
                     Voir la commande
                   </Button>
@@ -224,13 +227,9 @@ const MyReviews = () => {
         </div>
       )}
 
-      {/* Bouton retour en bas */}
       {reviews.length > 0 && (
         <div className="flex justify-center pt-4">
-          <Button
-            variant="outline"
-            onClick={() => navigate('/client/orders')}
-          >
+          <Button variant="outline" onClick={() => navigate('/client/orders')}>
             Retour aux commandes
           </Button>
         </div>
