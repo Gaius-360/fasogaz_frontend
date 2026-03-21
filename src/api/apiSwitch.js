@@ -10,6 +10,7 @@
 //    - Si refresh OK → relance la requête originale de façon transparente
 //    - File d'attente pour les requêtes parallèles pendant le refresh
 //    - withCredentials: true pour que les cookies soient transmis
+// ✅ FIX: bug redirection agent — hadAgentToken lu AVANT la suppression
 // ==========================================
 
 import axios from 'axios';
@@ -128,8 +129,13 @@ userApi.interceptors.response.use(
 
         if (!newToken) throw new Error('Pas de token dans la réponse refresh');
 
-        // Sauvegarder le nouveau token
-        localStorage.setItem('token', newToken);
+        // Sauvegarder le nouveau token selon le type de session active
+        const isAgentSession = !!localStorage.getItem('agentToken');
+        if (isAgentSession) {
+          localStorage.setItem('agentToken', newToken);
+        } else {
+          localStorage.setItem('token', newToken);
+        }
 
         // Mettre à jour le header par défaut pour les prochaines requêtes
         userApi.defaults.headers.common.Authorization = `Bearer ${newToken}`;
@@ -142,6 +148,10 @@ userApi.interceptors.response.use(
         return userApi(originalRequest);
 
       } catch (refreshError) {
+        // ✅ FIX: lire hadAgentToken AVANT de supprimer les tokens
+        // (l'ancienne version lisait après suppression → toujours false)
+        const hadAgentToken = !!localStorage.getItem('agentToken');
+
         // Refresh échoué → déconnecter proprement
         processQueue(refreshError, null);
 
@@ -150,8 +160,7 @@ userApi.interceptors.response.use(
         localStorage.removeItem('agentToken');
         localStorage.removeItem('agentUser');
 
-        // Redirection selon le type de token présent avant déconnexion
-        const hadAgentToken = !!localStorage.getItem('agentToken');
+        // Redirection selon le type de session qui était active
         window.location.href = hadAgentToken
           ? '/secure/agent/7h3k9m2p5n8q/login'
           : '/login';
@@ -214,10 +223,10 @@ export const api = {
     verifyOTP:              (data) => userApi.post('/auth/verify-otp', data),
     resendOTP:              (data) => userApi.post('/auth/resend-otp', data),
     login:                  (data) => userApi.post('/auth/login', data),
-    // ✅ NOUVEAU — appelé automatiquement par l'intercepteur, mais exposé
+    // ✅ Appelé automatiquement par l'intercepteur, mais exposé
     // si un composant veut forcer un refresh manuellement
     refresh:                ()     => userApi.post('/auth/refresh'),
-    // ✅ NOUVEAU — déconnexion propre : efface le cookie côté serveur
+    // ✅ Déconnexion propre : efface le cookie côté serveur
     logout:                 ()     => userApi.post('/auth/logout'),
     getMe:                  ()     => userApi.get('/auth/me'),
     updateProfile:          (data) => userApi.put('/auth/update-profile', data),

@@ -355,41 +355,85 @@ const Orders = () => {
         )}
 
         {/* ==========================================
-            MODAL ACCEPTATION — ✅ sans estimatedTime
+            MODAL ACCEPTATION
+            FIX MOBILE :
+            - CSS Grid avec 3 rows : header (auto) / scroll (1fr) / footer (auto)
+            - minHeight: 0 sur la zone scroll est OBLIGATOIRE
+            - mb-[60px] pour ne pas passer sous la bottom nav
+            - boutons dans le footer (row 3), jamais cachés
             ========================================== */}
         {showAcceptModal && orderToProcess && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
-            <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 sm:p-6 max-h-[90dvh] overflow-y-auto shadow-2xl">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                Accepter la commande
-              </h3>
-
-              <div className="flex items-center gap-3 mb-5 p-3 bg-gradient-to-br from-accent-50 to-primary-50 rounded-xl border-2 border-accent-200">
-                <Truck className="h-5 w-5 text-secondary-600 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-bold text-sm text-gray-900 truncate">
-                    Commande #{orderToProcess.orderNumber}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) { setShowAcceptModal(false); setOrderToProcess(null); } }}
+          >
+            <div
+              className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl mb-[60px] sm:mb-0"
+              style={{
+                maxHeight: 'calc(90dvh - 60px)',
+                display: 'grid',
+                gridTemplateRows: 'auto 1fr auto',
+              }}
+            >
+              {/* Header — row 1 */}
+              <div className="gradient-gazbf p-5 rounded-t-2xl">
+                <div className="text-white">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                      <Truck className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-xl font-bold">Accepter la commande</h3>
+                  </div>
+                  <p className="text-white/90 text-sm">
+                    Confirmez la prise en charge de cette livraison
                   </p>
-                  <p className="text-xs text-gray-500">Livraison à domicile</p>
                 </div>
               </div>
 
-              <p className="text-sm text-gray-600 mb-5">
-                En acceptant cette commande, vous vous engagez à la livrer dans les meilleurs délais.
-              </p>
+              {/* Zone scrollable — row 2, minHeight:0 indispensable */}
+              <div className="overflow-y-auto overscroll-contain p-5" style={{ minHeight: 0 }}>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-accent-50 to-primary-50 rounded-xl border-2 border-accent-200">
+                    <Truck className="h-5 w-5 text-secondary-600 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-gray-900 truncate">
+                        Commande #{orderToProcess.orderNumber}
+                      </p>
+                      <p className="text-xs text-gray-500">Livraison à domicile</p>
+                    </div>
+                  </div>
 
-              <div className="flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <Button variant="primary" fullWidth onClick={confirmAccept} loading={processing}>
-                  Accepter la commande
-                </Button>
-                <Button
-                  variant="outline"
-                  fullWidth
-                  onClick={() => { setShowAcceptModal(false); setOrderToProcess(null); }}
-                  disabled={processing}
-                >
-                  Annuler
-                </Button>
+                  <p className="text-sm text-gray-600">
+                    En acceptant cette commande, vous vous engagez à la livrer dans les meilleurs délais.
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer boutons — row 3, toujours visible */}
+              <div
+                className="p-4 sm:p-5 border-t-2 border-neutral-100 bg-white"
+                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => { setShowAcceptModal(false); setOrderToProcess(null); }}
+                    disabled={processing}
+                    className="flex-1"
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="gradient"
+                    type="button"
+                    onClick={confirmAccept}
+                    loading={processing}
+                    className="flex-1 h-12 text-base font-bold shadow-gazbf-lg"
+                  >
+                    Accepter
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -397,84 +441,122 @@ const Orders = () => {
 
         {/* ==========================================
             MODAL REJET
+            FIX MOBILE :
+            - CSS Grid avec 3 rows : header (auto) / scroll (1fr) / footer (auto)
+            - minHeight: 0 sur la zone scroll est OBLIGATOIRE
+            - mb-[60px] pour ne pas passer sous la bottom nav
+            - boutons dans le footer (row 3), jamais cachés
             ========================================== */}
         {showRejectModal && orderToProcess && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
-            <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 sm:p-6 max-h-[90dvh] overflow-y-auto shadow-2xl">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                Rejeter la commande
-              </h3>
-
-              <div className="flex items-center gap-3 mb-4 p-3 bg-gradient-to-br from-red-50 to-red-100 rounded-xl border-2 border-red-200">
-                <Truck className="h-5 w-5 text-red-600 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-bold text-sm text-gray-900 truncate">
-                    Commande #{orderToProcess.orderNumber}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) { setShowRejectModal(false); setOrderToProcess(null); setRejectionReason(''); } }}
+          >
+            <div
+              className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl mb-[60px] sm:mb-0"
+              style={{
+                maxHeight: 'calc(90dvh - 60px)',
+                display: 'grid',
+                gridTemplateRows: 'auto 1fr auto',
+              }}
+            >
+              {/* Header — row 1 */}
+              <div className="bg-red-600 p-5 rounded-t-2xl">
+                <div className="text-white">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                      <Truck className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-xl font-bold">Rejeter la commande</h3>
+                  </div>
+                  <p className="text-white/90 text-sm">
+                    Indiquez la raison du refus au client
                   </p>
-                  <p className="text-xs text-gray-500">Livraison à domicile</p>
                 </div>
               </div>
 
-              <div className="space-y-1 mb-4">
-                {[
-                  'Produit en rupture de stock',
-                  'Hors zone de livraison',
-                  'Fermé actuellement'
-                ].map((reason) => (
-                  <label
-                    key={reason}
-                    className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-xl transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="reason"
-                      value={reason}
-                      checked={rejectionReason === reason}
+              {/* Zone scrollable — row 2, minHeight:0 indispensable */}
+              <div className="overflow-y-auto overscroll-contain p-5" style={{ minHeight: 0 }}>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-red-50 to-red-100 rounded-xl border-2 border-red-200">
+                    <Truck className="h-5 w-5 text-red-600 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-gray-900 truncate">
+                        Commande #{orderToProcess.orderNumber}
+                      </p>
+                      <p className="text-xs text-gray-500">Livraison à domicile</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {[
+                      'Produit en rupture de stock',
+                      'Hors zone de livraison',
+                      'Fermé actuellement',
+                    ].map((reason) => (
+                      <label
+                        key={reason}
+                        className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-xl transition-colors"
+                      >
+                        <input
+                          type="radio"
+                          name="reason"
+                          value={reason}
+                          checked={rejectionReason === reason}
+                          onChange={(e) => setRejectionReason(e.target.value)}
+                          className="flex-shrink-0 accent-primary-600"
+                        />
+                        <span className="text-sm font-medium text-neutral-800">{reason}</span>
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-xl transition-colors">
+                      <input
+                        type="radio"
+                        name="reason"
+                        value="other"
+                        checked={!['Produit en rupture de stock', 'Hors zone de livraison', 'Fermé actuellement'].includes(rejectionReason)}
+                        onChange={() => setRejectionReason('')}
+                        className="flex-shrink-0 accent-primary-600"
+                      />
+                      <span className="text-sm font-medium text-neutral-800">Autre raison</span>
+                    </label>
+                  </div>
+
+                  {!['Produit en rupture de stock', 'Hors zone de livraison', 'Fermé actuellement'].includes(rejectionReason) && (
+                    <Input
+                      placeholder="Précisez la raison du rejet..."
+                      value={rejectionReason}
                       onChange={(e) => setRejectionReason(e.target.value)}
-                      className="flex-shrink-0 accent-primary-600"
                     />
-                    <span className="text-sm font-medium text-neutral-800">{reason}</span>
-                  </label>
-                ))}
-                <label className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-3 rounded-xl transition-colors">
-                  <input
-                    type="radio"
-                    name="reason"
-                    value="other"
-                    checked={!['Produit en rupture de stock', 'Hors zone de livraison', 'Fermé actuellement'].includes(rejectionReason)}
-                    onChange={() => setRejectionReason('')}
-                    className="flex-shrink-0 accent-primary-600"
-                  />
-                  <span className="text-sm font-medium text-neutral-800">Autre raison</span>
-                </label>
+                  )}
+                </div>
               </div>
 
-              {!['Produit en rupture de stock', 'Hors zone de livraison', 'Fermé actuellement'].includes(rejectionReason) && (
-                <div className="mb-4">
-                  <Input
-                    placeholder="Précisez la raison du rejet..."
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                  />
+              {/* Footer boutons — row 3, toujours visible */}
+              <div
+                className="p-4 sm:p-5 border-t-2 border-neutral-100 bg-white"
+                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => { setShowRejectModal(false); setOrderToProcess(null); setRejectionReason(''); }}
+                    disabled={processing}
+                    className="flex-1"
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="danger"
+                    type="button"
+                    onClick={confirmReject}
+                    loading={processing}
+                    className="flex-1 h-12 text-base font-bold"
+                  >
+                    Rejeter
+                  </Button>
                 </div>
-              )}
-
-              <div className="flex flex-col gap-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <Button variant="danger" fullWidth onClick={confirmReject} loading={processing}>
-                  Rejeter la commande
-                </Button>
-                <Button
-                  variant="outline"
-                  fullWidth
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setOrderToProcess(null);
-                    setRejectionReason('');
-                  }}
-                  disabled={processing}
-                >
-                  Annuler
-                </Button>
               </div>
             </div>
           </div>

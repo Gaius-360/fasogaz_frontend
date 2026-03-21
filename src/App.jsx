@@ -1,3 +1,10 @@
+// ==========================================
+// FICHIER: src/App.jsx
+// ✅ CORRECTION: isInitializing lu depuis authStore
+//    → spinner pendant la restauration de session
+//    → plus de flash vers /login au démarrage
+// ==========================================
+
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './store/authStore';
@@ -64,23 +71,50 @@ import AgentInvitations from './pages/agent/AgentInvitations';
 import AgentProfile from './pages/agent/AgentProfile';
 
 // ── CONFIGURATION DES ROUTES SÉCURISÉES ──────────────────────────
-// On récupère les chemins depuis le .env (SANS valeur par défaut)
 const ADMIN_LOGIN_PATH = import.meta.env.VITE_ADMIN_LOGIN_PATH;
 const AGENT_LOGIN_PATH = import.meta.env.VITE_AGENT_LOGIN_PATH;
 
-// Log d'avertissement en mode développement uniquement
 if (import.meta.env.DEV && (!ADMIN_LOGIN_PATH || !AGENT_LOGIN_PATH)) {
-  console.error("❌ ERREUR CRITIQUE : Les routes Admin ou Agent ne sont pas définies dans le .env");
+  console.error('❌ ERREUR CRITIQUE : Les routes Admin ou Agent ne sont pas définies dans le .env');
 }
 
+// ============================================
+// SPINNER DE DÉMARRAGE
+// Affiché pendant la restauration de session (~1ms, imperceptible)
+// mais indispensable pour ne pas flasher vers /login
+// ============================================
+const AppLoader = () => (
+  <div style={{
+    display:        'flex',
+    alignItems:     'center',
+    justifyContent: 'center',
+    height:         '100vh',
+    background:     'transparent'
+  }}>
+    <div style={{
+      width:        '36px',
+      height:       '36px',
+      border:       '3px solid #e5e7eb',
+      borderTop:    '3px solid #f97316', // couleur primaire FasoGaz
+      borderRadius: '50%',
+      animation:    'fg-spin 0.7s linear infinite'
+    }} />
+    <style>{`@keyframes fg-spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
+// ============================================
+// APP PRINCIPALE
+// ============================================
 function App() {
-  const { isAuthenticated, user, initAuth } = useAuthStore();
+  // ✅ Récupérer isInitializing en plus des valeurs existantes
+  const { isAuthenticated, isInitializing, user, initAuth } = useAuthStore();
 
   useEffect(() => {
-    // Initialisation auth
+    // Restauration de session (lit le localStorage, ~1ms)
     initAuth();
 
-    // Fermeture du splash natif
+    // Fermeture du splash natif PWA
     const timer = setTimeout(() => {
       if (typeof window.__FG_HIDE_SPLASH__ === 'function') {
         window.__FG_HIDE_SPLASH__();
@@ -90,13 +124,20 @@ function App() {
     return () => clearTimeout(timer);
   }, [initAuth]);
 
+  // ✅ GARDE CRITIQUE — bloquer tout le rendu pendant la restauration
+  // Sans ça : React rend les ProtectedRoute avec isAuthenticated=false
+  // et redirige vers /login avant même d'avoir lu le localStorage
+  if (isInitializing) {
+    return <AppLoader />;
+  }
+
   return (
     <Router>
       <GeolocationProvider>
         <Routes>
 
           {/* ========================================= */}
-          {/* ROUTES PUBLIQUES & REDIRECTIONS */}
+          {/* ROUTES PUBLIQUES & REDIRECTIONS           */}
           {/* ========================================= */}
           <Route
             path="/"
@@ -117,80 +158,95 @@ function App() {
             }
           />
 
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/register"          element={<Register />} />
+          <Route path="/login"             element={<Login />} />
           <Route path="/devenir-revendeur" element={<DevenirRevendeur />} />
           <Route path="/register-revendeur" element={<RegisterRevendeur />} />
 
           {/* ========================================= */}
-          {/* 🔐 ACCÈS SÉCURISÉS (URLs du .env) */}
+          {/* 🔐 ACCÈS SÉCURISÉS (URLs du .env)         */}
           {/* ========================================= */}
           {ADMIN_LOGIN_PATH && (
             <Route path={ADMIN_LOGIN_PATH} element={<AdminLogin />} />
           )}
-
           {AGENT_LOGIN_PATH && (
             <Route path={AGENT_LOGIN_PATH} element={<AgentLogin />} />
           )}
 
           {/* ========================================= */}
-          {/* ROUTES CLIENT (Protégées) */}
+          {/* ROUTES CLIENT (Protégées)                 */}
           {/* ========================================= */}
-          <Route path="/client" element={<ProtectedRoute allowedRoles={['client']}><ClientLayout /></ProtectedRoute>}>
-            <Route path="map" element={<MapPage />} />
-            <Route path="orders" element={<ClientOrders />} />
-            <Route path="order/new" element={<CreateOrder />} />
-            <Route path="profile" element={<ClientProfile />} />
-            <Route path="addresses" element={<ManageAddresses />} />
-            <Route path="my-reviews" element={<MyReviews />} />
+          <Route path="/client" element={
+            <ProtectedRoute allowedRoles={['client']}>
+              <ClientLayout />
+            </ProtectedRoute>
+          }>
+            <Route path="map"             element={<MapPage />} />
+            <Route path="orders"          element={<ClientOrders />} />
+            <Route path="order/new"       element={<CreateOrder />} />
+            <Route path="profile"         element={<ClientProfile />} />
+            <Route path="addresses"       element={<ManageAddresses />} />
+            <Route path="my-reviews"      element={<MyReviews />} />
             <Route path="payment-history" element={<ClientPaymentHistory />} />
-            <Route path="reviews" element={<ClientReviews />} />
-            <Route path="settings" element={<ClientSettings />} />
+            <Route path="reviews"         element={<ClientReviews />} />
+            <Route path="settings"        element={<ClientSettings />} />
           </Route>
 
           {/* ========================================= */}
-          {/* ROUTES REVENDEUR (Protégées) */}
+          {/* ROUTES REVENDEUR (Protégées)              */}
           {/* ========================================= */}
-          <Route path="/seller" element={<ProtectedRoute allowedRoles={['revendeur']}><SellerLayout /></ProtectedRoute>}>
-            <Route path="dashboard" element={<SellerDashboard />} />
-            <Route path="orders" element={<SellerOrders />} />
-            <Route path="products" element={<Products />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="reviews" element={<SellerReviews />} />
-            <Route path="profile" element={<SellerProfile />} />
-            <Route path="settings" element={<SellerSettings />} />
+          <Route path="/seller" element={
+            <ProtectedRoute allowedRoles={['revendeur']}>
+              <SellerLayout />
+            </ProtectedRoute>
+          }>
+            <Route path="dashboard"    element={<SellerDashboard />} />
+            <Route path="orders"       element={<SellerOrders />} />
+            <Route path="products"     element={<Products />} />
+            <Route path="customers"    element={<Customers />} />
+            <Route path="reviews"      element={<SellerReviews />} />
+            <Route path="profile"      element={<SellerProfile />} />
+            <Route path="settings"     element={<SellerSettings />} />
             <Route path="subscription" element={<SellerSubscription />} />
           </Route>
 
           {/* ========================================= */}
-          {/* ROUTES AGENT (Protégées) */}
+          {/* ROUTES AGENT (Protégées)                  */}
           {/* ========================================= */}
-          <Route path="/agent" element={<ProtectedAgentRoute><AgentLayout /></ProtectedAgentRoute>}>
-            <Route path="dashboard" element={<AgentDashboard />} />
+          <Route path="/agent" element={
+            <ProtectedAgentRoute>
+              <AgentLayout />
+            </ProtectedAgentRoute>
+          }>
+            <Route path="dashboard"   element={<AgentDashboard />} />
             <Route path="invitations" element={<AgentInvitations />} />
-            <Route path="profile" element={<AgentProfile />} />
+            <Route path="profile"     element={<AgentProfile />} />
           </Route>
 
           {/* ========================================= */}
-          {/* ROUTES ADMIN (Protégées) */}
+          {/* ROUTES ADMIN (Protégées)                  */}
           {/* ========================================= */}
-          <Route path="/admin" element={<ProtectedAdminRoute><AdminLayout /></ProtectedAdminRoute>}>
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="profile" element={<AdminProfile />} />
-            <Route path="sellers" element={<AdminSellers />} />
+          <Route path="/admin" element={
+            <ProtectedAdminRoute>
+              <AdminLayout />
+            </ProtectedAdminRoute>
+          }>
+            <Route path="dashboard"       element={<AdminDashboard />} />
+            <Route path="profile"         element={<AdminProfile />} />
+            <Route path="sellers"         element={<AdminSellers />} />
             <Route path="sellers/pending" element={<AdminPendingSellers />} />
-            <Route path="sellers/:id" element={<AdminSellerDetail />} />
-            <Route path="clients" element={<AdminClients />} />
-            <Route path="clients/:id" element={<AdminClientDetail />} />
-            <Route path="transactions" element={<AdminTransactions />} />
-            <Route path="wallet" element={<AdminWallet />} />
-            <Route path="pricing" element={<AdminPricing />} />
-            <Route path="settings" element={<AdminSettings />} />
-            <Route path="agents" element={<AdminAgents />} />
-            <Route path="invitations" element={<AdminInvitations />} />
+            <Route path="sellers/:id"     element={<AdminSellerDetail />} />
+            <Route path="clients"         element={<AdminClients />} />
+            <Route path="clients/:id"     element={<AdminClientDetail />} />
+            <Route path="transactions"    element={<AdminTransactions />} />
+            <Route path="wallet"          element={<AdminWallet />} />
+            <Route path="pricing"         element={<AdminPricing />} />
+            <Route path="settings"        element={<AdminSettings />} />
+            <Route path="agents"          element={<AdminAgents />} />
+            <Route path="invitations"     element={<AdminInvitations />} />
           </Route>
 
-          {/* Redirection automatique des erreurs 404 vers l'accueil */}
+          {/* Fallback 404 */}
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>

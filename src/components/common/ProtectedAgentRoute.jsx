@@ -1,7 +1,8 @@
 // ==========================================
 // FICHIER: src/components/common/ProtectedAgentRoute.jsx
 // Route protégée pour les agents terrain
-// ✅ CORRECTION: Vérifier seulement isAgentActive (pas isActive)
+// ✅ CORRECTION 1: isInitializing → évite la redirect prématurée
+// ✅ CORRECTION 2: Vérifier seulement isAgentActive (pas isActive)
 // ==========================================
 
 import React from 'react';
@@ -9,7 +10,14 @@ import { Navigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 
 const ProtectedAgentRoute = ({ children }) => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, isInitializing, user } = useAuthStore();
+
+  // ✅ Attendre la fin de la restauration de session
+  // Sans cette garde, un agent avec un token valide est renvoyé vers
+  // /secure/agent/.../login à chaque rechargement de page
+  if (isInitializing) {
+    return null; // App.jsx affiche déjà <AppLoader />
+  }
 
   // Pas authentifié → Login
   if (!isAuthenticated) {
