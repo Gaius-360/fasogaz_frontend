@@ -1,8 +1,9 @@
 // ==========================================
 // FICHIER: src/pages/auth/Login.jsx
-// ✅ Mot de passe oublié → WhatsApp support (plus d'OTP)
+// ✅ Mot de passe oublié → WhatsApp support
 // ✅ RESPONSIVE: Optimisé pour mobile (320px+), tablette et desktop
 // ✅ FIX: logo avec skeleton + fallback (LogoImage)
+// ✅ FIX PERSISTANCE: refreshToken extrait et passé au store
 // ==========================================
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -14,7 +15,6 @@ import useAuthStore from '../../store/authStore';
 import { api } from '../../api/apiSwitch';
 import LogoImage, { FasoGazWordmark } from '../../components/common/LogoImage';
 
-// ✅ Numéro WhatsApp du support (format international sans +)
 const SUPPORT_WHATSAPP = '22601212817';
 
 const buildWhatsAppMessage = () =>
@@ -71,18 +71,22 @@ const Login = () => {
 
     try {
       const response = await api.auth.login({
-        phone: formData.phone,
+        phone:    formData.phone,
         password: formData.password
       });
 
       if (response.success && response.data) {
-        const { token, user } = response.data;
-        login(token, user);
+        // ✅ Extraire refreshToken en plus de token et user
+        const { token, refreshToken, user } = response.data;
+
+        // ✅ Passer refreshToken au store — il sera sauvegardé en localStorage
+        login(token, user, refreshToken);
+
         setAlert({ type: 'success', message: 'Connexion réussie ! Redirection...' });
         setTimeout(() => {
-          if (user.role === 'client') navigate('/client/map');
+          if (user.role === 'client')         navigate('/client/map');
           else if (user.role === 'revendeur') navigate('/seller/dashboard');
-          else navigate('/');
+          else                                navigate('/');
         }, 1000);
       }
     } catch (error) {
@@ -99,7 +103,6 @@ const Login = () => {
         {/* ── Logo ── */}
         <div className="text-center mb-8 sm:mb-12">
           <div className="inline-flex items-center gap-2 rounded-2xl px-4 sm:px-8 py-3 sm:py-5">
-            {/* ✅ FIX: LogoImage avec skeleton + fallback */}
             <LogoImage
               src="/logo_gazbf.png"
               alt="FasoGaz Logo"

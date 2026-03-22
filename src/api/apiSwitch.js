@@ -1,16 +1,8 @@
 // ==========================================
 // FICHIER: src/api/apiSwitch.js
-// ✅ CORRECTIONS originales conservées :
-//    1. adminAuth.login envoie { email, password }
-//    2. Redirection 401 admin → bonne URL secrète
-//    3. FIX 429 : intercepteur attache error.response?.status
-// ✅ NOUVEAU: refresh token silencieux
-//    - Access token réduit à 15 min
-//    - 401 → tente POST /auth/refresh (cookie httpOnly envoyé auto)
-//    - Si refresh OK → relance la requête originale de façon transparente
-//    - File d'attente pour les requêtes parallèles pendant le refresh
-//    - withCredentials: true pour que les cookies soient transmis
-// ✅ FIX: bug redirection agent — hadAgentToken lu AVANT la suppression
+// ✅ Refresh token envoyé dans le body (pas de cookie)
+//    → fiable en cross-domain (fasogaz.onrender.com / fasogaz-backend.onrender.com)
+// ✅ Toutes les corrections originales conservées
 // ==========================================
 
 import axios from 'axios';
@@ -24,25 +16,18 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const userApi = axios.create({
   baseURL:         API_URL,
   headers:         { 'Content-Type': 'application/json' },
-  withCredentials: true, // ✅ OBLIGATOIRE — envoie le cookie refresh_token à chaque requête
+  withCredentials: false, // Plus de cookies — refresh token dans localStorage
 });
 
 const adminApi = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  // Pas de withCredentials pour adminApi : les admins utilisent adminToken en localStorage
 });
 
 // ============================================
-// ÉTAT DU REFRESH (partagé entre les requêtes)
+// ÉTAT DU REFRESH
 // ============================================
 
-/**
- * Mutex simple pour éviter plusieurs appels /auth/refresh simultanés.
- * Si 5 requêtes arrivent en parallèle avec un token expiré, une seule
- * lance le refresh — les 4 autres attendent dans failedQueue puis
- * sont relancées automatiquement avec le nouveau token.
- */
 let isRefreshing = false;
 let failedQueue  = [];
 
@@ -82,29 +67,28 @@ adminApi.interceptors.request.use(
 // ============================================
 
 userApi.interceptors.response.use(
-  // Succès → unwrap response.data (comportement original conservé)
   (response) => response.data,
 
   async (error) => {
     const originalRequest = error.config;
 
-    // ─────────────────────────────────────────
-    // CAS 401 : token expiré → tenter le refresh
-    // ─────────────────────────────────────────
     if (error.response?.status === 401 && !originalRequest._retry) {
 
-      // Cas particulier : la route /auth/refresh elle-même a répondu 401
-      // → le refresh token est invalide/expiré → vraie déconnexion
+      // La route /auth/refresh elle-même a échoué → vraie déconnexion
       if (originalRequest.url?.includes('/auth/refresh')) {
+        const hadAgentToken = !!localStorage.getItem('agentToken');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('agentToken');
         localStorage.removeItem('agentUser');
-        window.location.href = '/login';
+        localStorage.removeItem('refreshToken');
+        window.location.href = hadAgentToken
+          ? '/secure/agent/7h3k9m2p5n8q/login'
+          : '/login';
         return Promise.reject(error);
       }
 
-      // Si un refresh est déjà en cours, mettre cette requête en file d'attente
+      // Refresh déjà en cours → file d'attente
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -116,51 +100,60 @@ userApi.interceptors.response.use(
           .catch((err) => Promise.reject(err));
       }
 
-      // Marquer : on est en train de rafraîchir
       originalRequest._retry = true;
       isRefreshing = true;
 
+      // ✅ Lire AVANT toute suppression
+      const hadAgentToken = !!localStorage.getItem('agentToken');
+      const refreshToken  = localStorage.getItem('refreshToken');
+
+      // Pas de refresh token → déconnexion directe sans appel réseau
+      if (!refreshToken) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('agentToken');
+        localStorage.removeItem('agentUser');
+        isRefreshing = false;
+        window.location.href = hadAgentToken
+          ? '/secure/agent/7h3k9m2p5n8q/login'
+          : '/login';
+        return Promise.reject(error);
+      }
+
       try {
-        // ✅ Le cookie refresh_token est transmis automatiquement (withCredentials: true)
-        const refreshResponse = await userApi.post('/auth/refresh');
+        // ✅ Refresh token envoyé dans le body — aucun cookie nécessaire
+        const refreshResponse = await userApi.post('/auth/refresh', { refreshToken });
 
-        // refreshResponse est déjà unwrappé (notre intercepteur succès retourne response.data)
-        const newToken = refreshResponse.token;
+        const newAccessToken  = refreshResponse.token;
+        const newRefreshToken = refreshResponse.refreshToken;
 
-        if (!newToken) throw new Error('Pas de token dans la réponse refresh');
+        if (!newAccessToken) throw new Error('Pas de token dans la réponse refresh');
 
-        // Sauvegarder le nouveau token selon le type de session active
-        const isAgentSession = !!localStorage.getItem('agentToken');
-        if (isAgentSession) {
-          localStorage.setItem('agentToken', newToken);
+        // Sauvegarder les nouveaux tokens
+        if (hadAgentToken) {
+          localStorage.setItem('agentToken', newAccessToken);
         } else {
-          localStorage.setItem('token', newToken);
+          localStorage.setItem('token', newAccessToken);
+        }
+        if (newRefreshToken) {
+          localStorage.setItem('refreshToken', newRefreshToken);
         }
 
-        // Mettre à jour le header par défaut pour les prochaines requêtes
-        userApi.defaults.headers.common.Authorization = `Bearer ${newToken}`;
+        userApi.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
+        processQueue(null, newAccessToken);
 
-        // Débloquer toutes les requêtes en attente
-        processQueue(null, newToken);
-
-        // Relancer la requête originale avec le nouveau token
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return userApi(originalRequest);
 
       } catch (refreshError) {
-        // ✅ FIX: lire hadAgentToken AVANT de supprimer les tokens
-        // (l'ancienne version lisait après suppression → toujours false)
-        const hadAgentToken = !!localStorage.getItem('agentToken');
-
-        // Refresh échoué → déconnecter proprement
         processQueue(refreshError, null);
 
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('agentToken');
         localStorage.removeItem('agentUser');
+        localStorage.removeItem('refreshToken');
 
-        // Redirection selon le type de session qui était active
         window.location.href = hadAgentToken
           ? '/secure/agent/7h3k9m2p5n8q/login'
           : '/login';
@@ -172,23 +165,16 @@ userApi.interceptors.response.use(
       }
     }
 
-    // ─────────────────────────────────────────
-    // CAS 401 sur une route sans retry possible
-    // (ex: _retry déjà true → boucle évitée)
-    // ─────────────────────────────────────────
+    // 401 après retry → déconnexion
     if (error.response?.status === 401 && originalRequest._retry) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('refreshToken');
       window.location.href = '/login';
       return Promise.reject(error);
     }
 
-    // ─────────────────────────────────────────
-    // ✅ FIX 429 (conservé de la version originale)
-    // Enrichit l'objet rejeté avec le status HTTP
-    // pour que geocoding.js puisse détecter le 429
-    // et ouvrir le circuit breaker correctement.
-    // ─────────────────────────────────────────
+    // ✅ FIX 429
     const enrichedError = error.response?.data || error;
     enrichedError.status = error.response?.status ?? enrichedError.status ?? null;
 
@@ -202,7 +188,6 @@ adminApi.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
-      // ✅ CORRECTION originale conservée : bonne URL secrète
       window.location.href = '/secure/admin/3k9f2j8h4n7m/login';
     }
     return Promise.reject(error.response?.data || error);
@@ -215,18 +200,13 @@ adminApi.interceptors.response.use(
 
 export const api = {
 
-  // ==========================================
-  // AUTH UTILISATEUR
-  // ==========================================
   auth: {
     register:               (data) => userApi.post('/auth/register', data),
     verifyOTP:              (data) => userApi.post('/auth/verify-otp', data),
     resendOTP:              (data) => userApi.post('/auth/resend-otp', data),
     login:                  (data) => userApi.post('/auth/login', data),
-    // ✅ Appelé automatiquement par l'intercepteur, mais exposé
-    // si un composant veut forcer un refresh manuellement
-    refresh:                ()     => userApi.post('/auth/refresh'),
-    // ✅ Déconnexion propre : efface le cookie côté serveur
+    // ✅ Refresh manuel si besoin (l'intercepteur l'appelle automatiquement)
+    refresh:                (refreshToken) => userApi.post('/auth/refresh', { refreshToken }),
     logout:                 ()     => userApi.post('/auth/logout'),
     getMe:                  ()     => userApi.get('/auth/me'),
     updateProfile:          (data) => userApi.put('/auth/update-profile', data),
@@ -235,9 +215,6 @@ export const api = {
     deleteAccount:          (data) => userApi.delete('/auth/delete-account', { data }),
   },
 
-  // ==========================================
-  // NOTIFICATIONS IN-APP
-  // ==========================================
   notifications: {
     getMyNotifications:     (params) => userApi.get('/notifications', { params }),
     getUnreadCount:         ()       => userApi.get('/notifications/unread-count'),
@@ -247,18 +224,12 @@ export const api = {
     clearReadNotifications: ()       => userApi.delete('/notifications/clear-read'),
   },
 
-  // ==========================================
-  // PUSH NOTIFICATIONS
-  // ==========================================
   push: {
     subscribe:   (data) => userApi.post('/push/subscribe', data),
     unsubscribe: (data) => userApi.delete('/push/unsubscribe', { data }),
     getStatus:   ()     => userApi.get('/push/status'),
   },
 
-  // ==========================================
-  // ACCÈS 24H (CLIENT)
-  // ==========================================
   access: {
     getPricing:  ()       => userApi.get('/access/pricing'),
     checkStatus: ()       => userApi.get('/access/status'),
@@ -267,9 +238,6 @@ export const api = {
     getStats:    ()       => userApi.get('/access/stats'),
   },
 
-  // ==========================================
-  // PRODUCTS
-  // ==========================================
   products: {
     searchProducts:    (params)     => userApi.get('/products/search', { params }),
     getSellerProducts: (sellerId)   => userApi.get(`/products/seller/${sellerId}`),
@@ -280,9 +248,6 @@ export const api = {
     incrementView:     (id)         => userApi.post(`/products/${id}/view`),
   },
 
-  // ==========================================
-  // ORDERS
-  // ==========================================
   orders: {
     createOrder:  (data) => userApi.post('/orders', data),
     getMyOrders:  ()     => userApi.get('/orders/my-orders'),
@@ -290,9 +255,6 @@ export const api = {
     cancelOrder:  (id)   => userApi.put(`/orders/${id}/cancel`),
   },
 
-  // ==========================================
-  // SUBSCRIPTIONS (REVENDEURS)
-  // ==========================================
   subscriptions: {
     getPlans:           ()     => userApi.get('/subscriptions/plans'),
     createSubscription: (data) => userApi.post('/subscriptions', data),
@@ -302,9 +264,6 @@ export const api = {
     renewSubscription:  (data) => userApi.put('/subscriptions/renew', data),
   },
 
-  // ==========================================
-  // ADDRESSES
-  // ==========================================
   addresses: {
     createAddress:     (data)     => userApi.post('/addresses', data),
     getMyAddresses:    ()         => userApi.get('/addresses'),
@@ -314,9 +273,6 @@ export const api = {
     setDefaultAddress: (id)       => userApi.put(`/addresses/${id}/set-default`),
   },
 
-  // ==========================================
-  // REVIEWS
-  // ==========================================
   reviews: {
     createReview:       (data)             => userApi.post('/reviews', data),
     getMyReviews:       ()                 => userApi.get('/reviews/my-reviews'),
@@ -325,9 +281,6 @@ export const api = {
     respondToReview:    (id, data)         => userApi.put(`/reviews/${id}/respond`, data),
   },
 
-  // ==========================================
-  // SELLER
-  // ==========================================
   seller: {
     getStats:          ()         => userApi.get('/seller/stats'),
     getMyProducts:     ()         => userApi.get('/seller/products'),
@@ -341,10 +294,6 @@ export const api = {
     updateOrderStatus: (id, data) => userApi.put(`/orders/${id}/status`, data),
   },
 
-  // ==========================================
-  // ADMIN AUTH
-  // ✅ CORRECTION conservée : login envoie { email, password }
-  // ==========================================
   adminAuth: {
     login: (email, password) =>
       adminApi.post('/admin/auth/login', { email, password }),
@@ -354,40 +303,30 @@ export const api = {
       adminApi.put('/admin/auth/change-password', { currentPassword, newPassword }),
   },
 
-  // ==========================================
-  // ADMIN STATS
-  // ==========================================
   adminStats: {
     getDashboardStats: ()       => adminApi.get('/admin/stats/dashboard'),
     getRevenueChart:   (period) => adminApi.get('/admin/stats/revenue', { params: { period } }),
     getTopSellers:     (limit)  => adminApi.get('/admin/stats/top-sellers', { params: { limit } }),
   },
 
-  // ==========================================
-  // ADMIN — Namespace principal
-  // ==========================================
   admin: {
-
     wallet: {
       getBalance:     ()                        => adminApi.get('/admin/wallet/balance'),
       getWithdrawals: ()                        => adminApi.get('/admin/wallet/withdrawals'),
       withdraw:       (amount, method, details) =>
         adminApi.post('/admin/wallet/withdraw', { amount, method, details }),
     },
-
     transactions: {
       getAll:   (params) => adminApi.get('/admin/transactions', { params }),
       getStats: (period) => adminApi.get('/admin/transactions/stats', { params: { period } }),
       validate: (id)     => adminApi.put(`/admin/transactions/${id}/validate`),
     },
-
     settings: {
       get:           ()     => adminApi.get('/admin/settings'),
       update:        (data) => adminApi.put('/admin/settings', data),
       getPricing:    ()     => adminApi.get('/admin/settings/pricing'),
       updatePricing: (data) => adminApi.put('/admin/settings/pricing', data),
     },
-
     pricing: {
       getAll:             ()       => adminApi.get('/admin/pricing'),
       updateClient:       (data)   => adminApi.put('/admin/pricing/client', data),
@@ -395,7 +334,6 @@ export const api = {
       getClientStats:     ()       => adminApi.get('/admin/pricing/client/stats'),
       getClientPurchases: (params) => adminApi.get('/admin/pricing/client/purchases', { params }),
     },
-
     sellers: {
       getAll:        (params)          => adminApi.get('/admin/sellers', { params }),
       getById:       (id)              => adminApi.get(`/admin/sellers/${id}`),
@@ -407,7 +345,6 @@ export const api = {
       delete:        (id)              => adminApi.delete(`/admin/sellers/${id}`),
       resetPassword: (id, newPassword) => adminApi.put(`/admin/users/${id}/reset-password`, { newPassword }),
     },
-
     clients: {
       getAll:        (params)          => adminApi.get('/admin/clients', { params }),
       getById:       (id)              => adminApi.get(`/admin/clients/${id}`),
@@ -416,7 +353,6 @@ export const api = {
       delete:        (id)              => adminApi.delete(`/admin/clients/${id}`),
       resetPassword: (id, newPassword) => adminApi.put(`/admin/users/${id}/reset-password`, { newPassword }),
     },
-
     agents: {
       getAll:         (params)   => adminApi.get('/admin/agents', { params }),
       getById:        (id)       => adminApi.get(`/admin/agents/${id}`),
@@ -428,9 +364,6 @@ export const api = {
     },
   },
 
-  // ==========================================
-  // AGENT AUTH
-  // ==========================================
   agentAuth: {
     login:         (agentCode) => userApi.post('/agent/auth/login', { agentCode }),
     verifyCode:    (agentCode) => userApi.post('/agent/auth/verify-code', { agentCode }),
@@ -438,21 +371,14 @@ export const api = {
     updateProfile: (data)      => userApi.put('/agent/auth/profile', data),
   },
 
-  // ==========================================
-  // PRICING — Config publique
-  // ==========================================
   pricing: {
     getClientConfig:    () => userApi.get('/pricing/client'),
     getRevendeurConfig: () => userApi.get('/pricing/revendeur'),
     getAccessStatus:    () => userApi.get('/pricing/status'),
   },
 
-  // ==========================================
-  // INVITATIONS
-  // ==========================================
   invitations: {
     verify: (token) => userApi.get(`/invitations/verify/${token}`),
-
     generate: (data) => {
       const adminToken = localStorage.getItem('adminToken');
       const agentToken = localStorage.getItem('agentToken');
@@ -460,7 +386,6 @@ export const api = {
       if (agentToken) return userApi.post('/invitations/generate', data);
       return Promise.reject({ message: 'Non authentifié' });
     },
-
     getMyInvitations: (params) => {
       const adminToken = localStorage.getItem('adminToken');
       const agentToken = localStorage.getItem('agentToken');
@@ -468,14 +393,10 @@ export const api = {
       if (agentToken) return userApi.get('/invitations/my-invitations', { params });
       return Promise.reject({ message: 'Non authentifié' });
     },
-
     revoke:   (id, reason) => adminApi.put(`/invitations/${id}/revoke`, { reason }),
     getStats: (period)     => adminApi.get('/invitations/stats', { params: { period } }),
   },
 
-  // ==========================================
-  // PAIEMENTS LIGDICASH
-  // ==========================================
   payments: {
     initiatePayment: (data)              => userApi.post('/payments/initiate', data),
     checkStatus:     (transactionNumber) => userApi.get(`/payments/status/${transactionNumber}`),

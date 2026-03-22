@@ -3,6 +3,7 @@
 // ✅ CLIENTS UNIQUEMENT - Inscription directe avec vérification GPS obligatoire
 // ✅ RESPONSIVE: Optimisé pour mobile (320px+), tablette et desktop
 // ✅ FIX: logo avec skeleton + fallback (LogoImage)
+// ✅ FIX PERSISTANCE: refreshToken extrait et passé au store
 // ==========================================
 
 import React, { useState } from 'react';
@@ -141,20 +142,24 @@ const Register = () => {
     setLoading(true);
     try {
       const response = await api.auth.register({
-        phone: formData.phone,
-        password: formData.password,
-        role: 'client',
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        city: formData.city,
-        latitude: gpsData?.latitude,
-        longitude: gpsData?.longitude,
+        phone:            formData.phone,
+        password:         formData.password,
+        role:             'client',
+        firstName:        formData.firstName.trim(),
+        lastName:         formData.lastName.trim(),
+        city:             formData.city,
+        latitude:         gpsData?.latitude,
+        longitude:        gpsData?.longitude,
         locationVerified: true
       });
 
       if (response.success) {
-        const { token, user } = response.data;
-        login(token, user);
+        // ✅ Extraire refreshToken en plus de token et user
+        const { token, refreshToken, user } = response.data;
+
+        // ✅ Passer refreshToken au store
+        login(token, user, refreshToken);
+
         navigate('/client/map');
       }
     } catch (error) {
@@ -197,7 +202,6 @@ const Register = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-3 sm:p-4 md:p-6">
       <div className="max-w-md w-full">
 
-        {/* Titre */}
         <div className="text-center mb-6 sm:mb-8 px-2">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
             Créer un compte client
@@ -207,7 +211,6 @@ const Register = () => {
           </p>
         </div>
 
-        {/* Formulaire */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-5 sm:p-6 md:p-8">
 
           {alert && (
