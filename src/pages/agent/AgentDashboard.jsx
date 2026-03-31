@@ -68,28 +68,33 @@ const AgentDashboard = () => {
       const response = await api.invitations.generate(modalData);
 
       if (response.success) {
-        const { url, token } = response.data;
-
-        setAlert({
-          type: 'success',
-          message: 'Lien généré avec succès !'
-        });
-
-        // Copier automatiquement
-        await navigator.clipboard.writeText(url);
-
-        // Recharger la liste
-        loadInvitations();
-
-        // Fermer le modal
+        // 1. On ferme le modal et on recharge la liste d'abord
         setShowModal(false);
         setModalData({ expiryHours: 24, notes: '' });
+        await loadInvitations();
+
+        // 2. On affiche le message de succès
+        setAlert({
+          type: 'success',
+          message: 'Lien généré avec succès ! Vous pouvez le copier dans la liste.'
+        });
+
+        // 3. On tente la copie MAIS dans un bloc séparé pour ne pas générer d'erreur si ça échoue
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(response.data.url);
+          }
+        } catch (copyErr) {
+          console.warn("La copie automatique a été bloquée par le navigateur, pas de souci.");
+          // Ici on ne met pas d'alerte d'erreur car le lien est DEJÀ créé.
+        }
       }
     } catch (error) {
       console.error('❌ Erreur génération lien:', error);
+      // On n'affiche l'erreur que si c'est vraiment la création qui a échoué
       setAlert({
         type: 'error',
-        message: error.message || 'Erreur lors de la génération'
+        message: error.response?.data?.message || 'Erreur lors de la génération du lien.'
       });
     } finally {
       setLoading(false);
