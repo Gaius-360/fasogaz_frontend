@@ -190,7 +190,10 @@
   }
 }
 
-/* Keyframes */
+/* ============================================================
+   Keyframes
+   ============================================================ */
+
 /* ✅ FIX PWA — Animation du spinner avec translateZ(0) pour forcer le GPU */
 @keyframes spinner-spin {
   from { transform: rotate(0deg) translateZ(0); }
@@ -199,56 +202,107 @@
 
 @keyframes fadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
 
 @keyframes slideInRight {
   from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(0);    opacity: 1; }
 }
 
 @keyframes slideInLeft {
   from { transform: translateX(-100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(0);     opacity: 1; }
 }
 
 @keyframes slideInUp {
   from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
 
 @keyframes scaleIn {
   from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  to   { transform: scale(1);   opacity: 1; }
 }
 
 @keyframes bounceSubtle {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+  50%       { transform: translateY(-5px); }
 }
 
+/* ============================================================
+   NAV BADGE — Bordure animée (ring-pulse)
+   Utilisée par NavBadgeBorder.jsx
+   ============================================================ */
+
+/* Palette client (primary) */
+@keyframes ring-pulse-primary {
+  0%, 100% {
+    box-shadow: 0 0 0 2px #e85d27;               /* primary-500 */
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(232, 93, 39, 0.20);
+  }
+}
+
+/* Palette vendeur (secondary) */
+@keyframes ring-pulse-secondary {
+  0%, 100% {
+    box-shadow: 0 0 0 2px #f59e0b;               /* secondary-500 */
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.20);
+  }
+}
+
+.ring-pulse-primary {
+  animation: ring-pulse-primary 1.8s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+.ring-pulse-secondary {
+  animation: ring-pulse-secondary 1.8s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* ============================================================
+   Print
+   ============================================================ */
 @media print {
   .no-print { display: none !important; }
-
-  body { @apply text-black bg-white; }
-
+  body  { @apply text-black bg-white; }
   .card { @apply shadow-none border; }
 }
 
-/* ✅ FIX PWA — On exclut le spinner et les animations de chargement de la réduction mobile */
+/* ============================================================
+   FIX MOBILE — reset animation global (max-width: 640px)
+   ⚠️  Les classes nav badge et le spinner sont EXCLUS du reset
+       pour rester fonctionnels sur mobile.
+   ============================================================ */
 @media (max-width: 640px) {
-  *:not(.spinner):not([class*="animate-spin"]) {
+  *:not(.spinner):not([class*="animate-spin"]):not(.ring-pulse-primary):not(.ring-pulse-secondary) {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  /* Force le maintien des animations de bordure nav sur mobile */
+  .ring-pulse-primary {
+    animation: ring-pulse-primary 1.8s ease-in-out infinite !important;
+    animation-duration: 1.8s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  .ring-pulse-secondary {
+    animation: ring-pulse-secondary 1.8s ease-in-out infinite !important;
+    animation-duration: 1.8s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
-@media (prefers-contrast: high) {
-  .btn { @apply border-2; }
-  .input { @apply border-2; }
-}
-
+/* ============================================================
+   Accessibilité — prefers-reduced-motion
+   ============================================================ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -256,4 +310,9 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+@media (prefers-contrast: high) {
+  .btn   { @apply border-2; }
+  .input { @apply border-2; }
 }

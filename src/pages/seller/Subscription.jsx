@@ -1,6 +1,9 @@
 // ==========================================
 // FICHIER: src/pages/seller/SellerSubscription.jsx
 // Page d'abonnement revendeur avec paiement LigdiCash
+// ✅ CORRECTIONS:
+//    - Suppression période de grâce (grace_period)
+//    - Normalisation daysRemaining / remainingDays
 // ==========================================
 
 import React, { useState, useEffect } from 'react';
@@ -124,12 +127,18 @@ const SellerSubscription = () => {
     }
   };
 
+  // ✅ CORRIGÉ: Normalisation daysRemaining / remainingDays + suppression grace_period
   const loadAccessStatus = async () => {
     try {
       const response = await api.pricing.getAccessStatus();
       
       if (response?.success && response.data) {
-        setAccessStatus(response.data);
+        const d = response.data;
+        setAccessStatus({
+          ...d,
+          // Normalisation : accepte daysRemaining ou remainingDays selon l'API
+          daysRemaining: d.daysRemaining ?? d.remainingDays ?? 0,
+        });
       } else {
         setAccessStatus(null);
       }
@@ -173,9 +182,6 @@ const SellerSubscription = () => {
     });
   };
 
-  /**
-   * ✅ NOUVEAU: Initier le paiement via LigdiCash
-   */
   const handleSubscribe = async (plan) => {
     // Vérifier s'il y a un changement de plan nécessitant confirmation
     if (subscription?.isActive && !changePlanConfirm) {
@@ -193,7 +199,6 @@ const SellerSubscription = () => {
     try {
       console.log('💳 Lancement paiement pour:', plan);
 
-      // Préparer les métadonnées
       const metadata = {
         planType: plan.type,
         duration: plan.duration,
@@ -201,22 +206,14 @@ const SellerSubscription = () => {
         forceChange: changePlanConfirm ? true : false
       };
 
-      // Initier le paiement (redirection automatique vers LigdiCash)
       await initiatePayment(plan.price, 'subscription', metadata);
-
-      // Note: Le code après ne sera jamais exécuté car l'utilisateur sera redirigé
-      // La gestion du retour se fera via les pages de callback
 
     } catch (error) {
       console.error('❌ Erreur abonnement:', error);
       setSelectedPlan(null);
-      // L'erreur est déjà gérée par le hook usePayment
     }
   };
 
-  /**
-   * ✅ NOUVEAU: Renouvellement anticipé via LigdiCash
-   */
   const handleEarlyRenewal = async () => {
     if (!subscription) {
       setAlert({
@@ -245,7 +242,6 @@ const SellerSubscription = () => {
         currentEndDate: subscription.endDate
       };
 
-      // Initier le paiement pour le renouvellement
       await initiatePayment(planConfig.price, 'subscription', metadata);
 
     } catch (error) {
@@ -324,7 +320,7 @@ const SellerSubscription = () => {
         </p>
       </div>
 
-      {/* ✅ Badge mode simulation (si applicable) */}
+      {/* Badge mode simulation */}
       {import.meta.env.VITE_LIGDICASH_SIMULATION === 'true' && (
         <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-xl p-4">
           <div className="flex items-center gap-3">
@@ -410,7 +406,6 @@ const SellerSubscription = () => {
               </p>
             </div>
 
-            {/* ✅ Info paiement LigdiCash */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
               <div className="flex items-center gap-2 mb-2">
                 <CreditCard className="h-4 w-4 text-gray-600" />
@@ -497,25 +492,19 @@ const SellerSubscription = () => {
         </div>
       )}
 
-      {/* Statut d'accès */}
+      {/* ✅ CORRIGÉ: Statut d'accès — sans grace_period */}
       {accessStatus && accessStatus.hasAccess && (
         <div className={`rounded-xl p-4 sm:p-6 border-2 ${
-          accessStatus.type === 'free_trial' 
+          accessStatus.type === 'free_trial'
             ? 'bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200'
-            : accessStatus.type === 'grace_period'
-            ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200'
             : 'bg-gradient-to-r from-green-50 to-blue-50 border-green-200'
         }`}>
           <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
             <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              accessStatus.type === 'free_trial' ? 'bg-purple-100' :
-              accessStatus.type === 'grace_period' ? 'bg-yellow-100' :
-              'bg-green-100'
+              accessStatus.type === 'free_trial' ? 'bg-purple-100' : 'bg-green-100'
             }`}>
               {accessStatus.type === 'free_trial' ? (
                 <Gift className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
-              ) : accessStatus.type === 'grace_period' ? (
-                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
               ) : (
                 <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
               )}
@@ -524,18 +513,14 @@ const SellerSubscription = () => {
             <div className="flex-1 w-full">
               <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
                 {accessStatus.type === 'free_trial' && `🎁 ${pricingConfig.freeTrialDays} jours d'essai gratuit`}
-                {accessStatus.type === 'grace_period' && '⏰ Période de Grâce'}
                 {accessStatus.type === 'active_subscription' && '✅ Abonnement Actif'}
               </h3>
               <p className="text-sm sm:text-base text-gray-700 mb-2 sm:mb-3">
-                {accessStatus.type === 'free_trial' && 
+                {accessStatus.type === 'free_trial' &&
                   `Votre dépôt est visible gratuitement pendant encore ${accessStatus.daysRemaining} jours !`
                 }
-                {accessStatus.type === 'grace_period' && 
-                  `Vous avez ${accessStatus.daysRemaining} jours pour renouveler sans perdre votre visibilité`
-                }
-                {accessStatus.type === 'active_subscription' && 
-                  `Votre dépôt est visible sur la carte. Encore ${accessStatus.daysRemaining} jours d'accès.`
+                {accessStatus.type === 'active_subscription' &&
+                  `Votre dépôt est visible sur la carte.${accessStatus.daysRemaining > 0 ? ` Encore ${accessStatus.daysRemaining} jour${accessStatus.daysRemaining > 1 ? 's' : ''} d'accès.` : ''}`
                 }
               </p>
               
@@ -636,8 +621,7 @@ const SellerSubscription = () => {
               className="flex-1 sm:flex-none px-4 sm:px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium transition flex items-center justify-center gap-2 text-sm sm:text-base"
             >
               <Trash2 className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Supprimer</span>
-              <span className="sm:hidden">Supprimer</span>
+              <span>Supprimer</span>
             </button>
           </div>
         </div>

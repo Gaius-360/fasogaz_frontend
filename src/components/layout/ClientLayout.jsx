@@ -1,5 +1,6 @@
 // ==========================================
 // FICHIER: src/components/layout/ClientLayout.jsx
+// ✅ AJOUT: useNavBadges + NavBadgeBorder sur tous les onglets
 // ✅ AJOUT: PushNotificationGate role="client" (non bloquant)
 // ✅ AJOUT: NotificationBell desktop + mobile
 // ✅ FIX: logo avec skeleton + fallback (LogoImage)
@@ -11,8 +12,10 @@ import {
   X, Settings, Phone, ArrowLeftRight
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
+import useNavBadges from '../../hooks/useNavBadges';
 import LogoImage, { FasoGazWordmark } from '../common/LogoImage';
 import NotificationBell from '../common/NotificationBell';
+import NavBadgeBorder from '../common/NavBadgeBorder';
 import PushNotificationGate from '../common/PushNotificationGate';
 
 const ClientLayout = () => {
@@ -21,12 +24,14 @@ const ClientLayout = () => {
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  const { badges, clearBadge } = useNavBadges();
+
   const navItems = [
-    { to: '/client/map',             icon: Map,       label: 'Carte'     },
-    { to: '/client/orders',          icon: ShoppingBag, label: 'Commandes' },
-    { to: '/client/my-reviews',      icon: Star,      label: 'Avis'      },
-    { to: '/client/payment-history', icon: CreditCard, label: 'Paiements' },
-    { to: '/client/profile',         icon: User,      label: 'Profil'    },
+    { to: '/client/map',             icon: Map,        label: 'Carte',     navKey: 'map'             },
+    { to: '/client/orders',          icon: ShoppingBag, label: 'Commandes', navKey: 'orders'          },
+    { to: '/client/my-reviews',      icon: Star,        label: 'Avis',      navKey: 'reviews'         },
+    { to: '/client/payment-history', icon: CreditCard,  label: 'Paiements', navKey: 'payment-history' },
+    { to: '/client/profile',         icon: User,        label: 'Profil',    navKey: null              },
   ];
 
   return (
@@ -64,17 +69,21 @@ const ClientLayout = () => {
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.to;
+                const count    = item.navKey ? (badges[item.navKey] || 0) : 0;
                 return (
                   <NavLink
                     key={item.to}
                     to={item.to}
+                    onClick={() => item.navKey && clearBadge(item.navKey)}
                     className={`flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg transition-all text-xs lg:text-sm font-medium
                       ${isActive
                         ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white font-bold shadow-gazbf'
                         : 'text-neutral-700 hover:bg-primary-50 hover:text-primary-600'
                       }`}
                   >
-                    <item.icon className="h-4 w-4 lg:h-5 lg:w-5" />
+                    <NavBadgeBorder count={count} seller={false}>
+                      <item.icon className="h-4 w-4 lg:h-5 lg:w-5" />
+                    </NavBadgeBorder>
                     <span className="hidden lg:inline">{item.label}</span>
                   </NavLink>
                 );
@@ -83,7 +92,6 @@ const ClientLayout = () => {
 
             {/* Actions Desktop */}
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
-              {/* ✅ AJOUT NotificationBell desktop */}
               <NotificationBell />
 
               <button
@@ -119,7 +127,6 @@ const ClientLayout = () => {
 
             {/* Actions Mobile */}
             <div className="md:hidden flex items-center gap-2">
-              {/* ✅ AJOUT NotificationBell mobile */}
               <NotificationBell />
 
               <button
@@ -232,14 +239,18 @@ const ClientLayout = () => {
           <div className="grid grid-cols-5 gap-0.5 px-1 py-1.5 safe-area-inset-bottom">
             {navItems.map((item) => {
               const isActive = location.pathname === item.to;
+              const count    = item.navKey ? (badges[item.navKey] || 0) : 0;
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  onClick={() => item.navKey && clearBadge(item.navKey)}
                   className="flex flex-col items-center justify-center py-1.5 rounded-lg transition-all touch-manipulation"
                 >
                   <div className={`p-1.5 rounded-lg ${isActive ? 'bg-gradient-to-br from-primary-500 to-secondary-500' : ''}`}>
-                    <item.icon className={`h-5 w-5 mb-0.5 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
+                    <NavBadgeBorder count={count} seller={false}>
+                      <item.icon className={`h-5 w-5 mb-0.5 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
+                    </NavBadgeBorder>
                   </div>
                   <span className={`text-[10px] font-semibold leading-tight ${isActive ? 'text-primary-600' : 'text-neutral-500'}`}>
                     {item.label}

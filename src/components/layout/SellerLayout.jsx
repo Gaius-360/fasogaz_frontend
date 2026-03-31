@@ -1,5 +1,6 @@
 // ==========================================
 // FICHIER: src/components/layout/SellerLayout.jsx
+// ✅ AJOUT: useNavBadges + NavBadgeBorder sur tous les onglets
 // ✅ AJOUT: PushNotificationGate — notifications obligatoires
 // ✅ FIX: logo avec skeleton + fallback (LogoImage)
 // ==========================================
@@ -10,24 +11,28 @@ import {
   CreditCard, User, X, MoreHorizontal, ChevronRight, ArrowLeftRight
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
+import useNavBadges from '../../hooks/useNavBadges';
 import NotificationBell from '../common/NotificationBell';
+import NavBadgeBorder from '../common/NavBadgeBorder';
 import PushNotificationGate from '../common/PushNotificationGate';
 import LogoImage, { FasoGazWordmark } from '../common/LogoImage';
 
 const SellerLayout = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu]     = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  const { badges, clearBadge } = useNavBadges();
+
   const navItems = [
-    { to: '/seller/dashboard',    icon: LayoutDashboard, label: 'Dashboard'   },
-    { to: '/seller/orders',       icon: ShoppingBag,     label: 'Commandes'   },
-    { to: '/seller/products',     icon: Package,         label: 'Stock'       },
-    { to: '/seller/customers',    icon: Users,           label: 'Clients'     },
-    { to: '/seller/reviews',      icon: Star,            label: 'Avis'        },
-    { to: '/seller/subscription', icon: CreditCard,      label: 'Abonnement'  },
-    { to: '/seller/profile',      icon: User,            label: 'Profil'      },
+    { to: '/seller/dashboard',    icon: LayoutDashboard, label: 'Dashboard',  navKey: null           },
+    { to: '/seller/orders',       icon: ShoppingBag,     label: 'Commandes',  navKey: 'orders'       },
+    { to: '/seller/products',     icon: Package,         label: 'Stock',      navKey: 'products'     },
+    { to: '/seller/customers',    icon: Users,           label: 'Clients',    navKey: null           },
+    { to: '/seller/reviews',      icon: Star,            label: 'Avis',       navKey: 'reviews'      },
+    { to: '/seller/subscription', icon: CreditCard,      label: 'Abonnement', navKey: 'subscription' },
+    { to: '/seller/profile',      icon: User,            label: 'Profil',     navKey: null           },
   ];
 
   const mainBottomNavItems = navItems.slice(0, 3);
@@ -46,7 +51,7 @@ const SellerLayout = () => {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
 
-            {/* Logo - ✅ FIX: LogoImage avec skeleton + fallback */}
+            {/* Logo */}
             <div
               className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
               onClick={() => navigate('/seller/dashboard')}
@@ -73,22 +78,32 @@ const SellerLayout = () => {
 
             {/* Nav desktop */}
             <nav className="hidden lg:flex items-center gap-1">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                      isActive
-                        ? 'bg-gradient-to-r from-secondary-500 to-secondary-600 text-white font-bold shadow-gazbf'
-                        : 'text-neutral-700 hover:bg-secondary-50 hover:text-secondary-600 font-medium'
-                    }`
-                  }
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span className="text-sm">{item.label}</span>
-                </NavLink>
-              ))}
+              {navItems.map((item) => {
+                const count = item.navKey ? (badges[item.navKey] || 0) : 0;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => item.navKey && clearBadge(item.navKey)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                        isActive
+                          ? 'bg-gradient-to-r from-secondary-500 to-secondary-600 text-white font-bold shadow-gazbf'
+                          : 'text-neutral-700 hover:bg-secondary-50 hover:text-secondary-600 font-medium'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <NavBadgeBorder count={count} seller={true}>
+                          <item.icon className="h-4 w-4" />
+                        </NavBadgeBorder>
+                        <span className="text-sm">{item.label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                );
+              })}
             </nav>
 
             {/* Actions desktop */}
@@ -219,10 +234,14 @@ const SellerLayout = () => {
                 <div className="space-y-1">
                   {moreMenuItems.map((item) => {
                     const isActive = window.location.pathname === item.to;
+                    const count    = item.navKey ? (badges[item.navKey] || 0) : 0;
                     return (
                       <button
                         key={item.to}
-                        onClick={() => handleMoreMenuItemClick(item.to)}
+                        onClick={() => {
+                          handleMoreMenuItemClick(item.to);
+                          item.navKey && clearBadge(item.navKey);
+                        }}
                         className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition-all ${
                           isActive
                             ? 'bg-gradient-to-r from-secondary-500 to-secondary-600 text-white font-bold shadow-lg'
@@ -230,7 +249,9 @@ const SellerLayout = () => {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <item.icon className="h-5 w-5 flex-shrink-0" />
+                          <NavBadgeBorder count={count} seller={true}>
+                            <item.icon className="h-5 w-5 flex-shrink-0" />
+                          </NavBadgeBorder>
                           <span className="text-base">{item.label}</span>
                         </div>
                         <ChevronRight className={`h-4 w-4 ${isActive ? 'text-white' : 'text-gray-400'}`} />
@@ -246,30 +267,54 @@ const SellerLayout = () => {
         {/* Navigation mobile bottom */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-neutral-200 shadow-lg z-50 safe-area-bottom">
           <div className="grid grid-cols-4 gap-0.5 sm:gap-1 px-1 sm:px-2 py-1.5 sm:py-2">
-            {mainBottomNavItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className="flex flex-col items-center justify-center py-1.5 sm:py-2 rounded-lg transition-all">
-                {({ isActive }) => (
-                  <>
-                    <div className={`p-1 sm:p-1.5 rounded-lg ${isActive ? 'bg-gradient-to-br from-secondary-500 to-primary-500' : ''}`}>
-                      <item.icon className={`h-5 w-5 sm:h-6 sm:w-6 mb-0.5 sm:mb-1 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
-                    </div>
-                    <span className={`text-[10px] sm:text-xs font-semibold truncate max-w-[60px] sm:max-w-[80px] ${isActive ? 'text-secondary-600' : 'text-neutral-500'}`}>
-                      {item.label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            ))}
 
-            <button
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
-              className={`flex flex-col items-center justify-center py-1.5 sm:py-2 rounded-lg transition-all ${showMoreMenu ? 'bg-secondary-50' : ''}`}
-            >
-              <div className={`p-1 sm:p-1.5 rounded-lg ${showMoreMenu ? 'bg-gradient-to-br from-secondary-500 to-primary-500' : ''}`}>
-                <MoreHorizontal className={`h-5 w-5 sm:h-6 sm:w-6 mb-0.5 sm:mb-1 ${showMoreMenu ? 'text-white' : 'text-neutral-400'}`} />
-              </div>
-              <span className={`text-[10px] sm:text-xs font-semibold ${showMoreMenu ? 'text-secondary-600' : 'text-neutral-500'}`}>Plus</span>
-            </button>
+            {mainBottomNavItems.map((item) => {
+              const count = item.navKey ? (badges[item.navKey] || 0) : 0;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => item.navKey && clearBadge(item.navKey)}
+                  className="flex flex-col items-center justify-center py-1.5 sm:py-2 rounded-lg transition-all"
+                >
+                  {({ isActive }) => (
+                    <>
+                      <div className={`p-1 sm:p-1.5 rounded-lg ${isActive ? 'bg-gradient-to-br from-secondary-500 to-primary-500' : ''}`}>
+                        <NavBadgeBorder count={count} seller={true}>
+                          <item.icon className={`h-5 w-5 sm:h-6 sm:w-6 mb-0.5 sm:mb-1 ${isActive ? 'text-white' : 'text-neutral-400'}`} />
+                        </NavBadgeBorder>
+                      </div>
+                      <span className={`text-[10px] sm:text-xs font-semibold truncate max-w-[60px] sm:max-w-[80px] ${isActive ? 'text-secondary-600' : 'text-neutral-500'}`}>
+                        {item.label}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+
+            {/* Bouton "Plus" — badge agrégé des items cachés */}
+            {(() => {
+              const moreCount = moreMenuItems.reduce(
+                (sum, i) => sum + (i.navKey ? (badges[i.navKey] || 0) : 0), 0
+              );
+              return (
+                <button
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  className={`flex flex-col items-center justify-center py-1.5 sm:py-2 rounded-lg transition-all ${showMoreMenu ? 'bg-secondary-50' : ''}`}
+                >
+                  <div className={`p-1 sm:p-1.5 rounded-lg ${showMoreMenu ? 'bg-gradient-to-br from-secondary-500 to-primary-500' : ''}`}>
+                    <NavBadgeBorder count={moreCount} seller={true}>
+                      <MoreHorizontal className={`h-5 w-5 sm:h-6 sm:w-6 mb-0.5 sm:mb-1 ${showMoreMenu ? 'text-white' : 'text-neutral-400'}`} />
+                    </NavBadgeBorder>
+                  </div>
+                  <span className={`text-[10px] sm:text-xs font-semibold ${showMoreMenu ? 'text-secondary-600' : 'text-neutral-500'}`}>
+                    Plus
+                  </span>
+                </button>
+              );
+            })()}
+
           </div>
         </nav>
 
