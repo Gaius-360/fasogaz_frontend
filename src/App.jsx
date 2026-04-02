@@ -1,11 +1,15 @@
 // ==========================================
 // FICHIER: src/App.jsx
-// ✅ CORRECTION: isInitializing lu depuis authStore
+// ✅ isInitializing lu depuis authStore
 //    → spinner pendant la restauration de session
 //    → plus de flash vers /login au démarrage
+// ✅ CORRECTION BUG 3 PWA: refresh proactif sur visibilitychange
+//    → quand l'app revient au premier plan après suspension,
+//      le accessToken (1h) est rafraîchi silencieusement avant
+//      que la moindre requête échoue avec 401
 // ==========================================
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './store/authStore';
 import { GeolocationProvider } from './contexts/GeolocationContext';
@@ -95,7 +99,7 @@ const AppLoader = () => (
       width:        '36px',
       height:       '36px',
       border:       '3px solid #e5e7eb',
-      borderTop:    '3px solid #f97316', // couleur primaire FasoGaz
+      borderTop:    '3px solid #f97316',
       borderRadius: '50%',
       animation:    'fg-spin 0.7s linear infinite'
     }} />
@@ -107,12 +111,89 @@ const AppLoader = () => (
 // APP PRINCIPALE
 // ============================================
 function App() {
-  // ✅ Récupérer isInitializing en plus des valeurs existantes
-  const { isAuthenticated, isInitializing, user, initAuth } = useAuthStore();
+  const { isAuthenticated, isInitializing, user, initAuth, login } = useAuthStore();
+
+  // ✅ CORRECTION BUG 3 PWA : refresh proactif au retour au premier plan
+  //
+  // Problème : sur mobile PWA, le système tue le processus quand l'app
+  // passe en arrière-plan. Quand l'utilisateur revient, React remonte
+  // depuis zéro. initAuth() restaure la session depuis localStorage,
+  // mais le accessToken (1h) peut être expiré si l'app était suspendue
+  // longtemps. Aucune requête API n'est lancée immédiatement, donc
+  // l'intercepteur 401 ne se déclenche pas encore. Résultat : la 1ère
+  // requête réelle échoue avec 401, le refresh s'exécute, mais si le
+  // réseau est lent (2G, Render cold start), ça prend du temps et
+  // certains composants redirigent vers /login avant que le refresh
+  // n'ait fini.
+  //
+  // Solution : dès que l'app redevient visible, on tente un refresh
+  // silencieux en arrière-plan AVANT que les composants lancent leurs
+  // requêtes. Si ça réussit, le nouveau token est en place. Si ça
+  // échoue (pas de réseau, refresh token expiré), l'intercepteur
+  // prendra le relais normalement sur la 1ère vraie requête.
+  const handleVisibilityChange = useCallback(async () => {
+    if (document.visibilityState !== 'visible') return;
+
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) return;
+
+    // On ne rafraîchit que si l'utilisateur est censé être connecté
+    const hasSession =
+      localStorage.getItem('token') ||
+      localStorage.getItem('agentToken');
+    if (!hasSession) return;
+
+    console.log('👁 App revenue au premier plan — refresh proactif du token');
+
+    try {
+      // Import dynamique pour éviter les imports circulaires au démarrage
+      const { api } = await import('./api/apiSwitch');
+      const response = await api.auth.refresh(refreshToken);
+
+      // ResponseHandler.success enveloppe dans .data
+      // → response = { success, message, data: { token, refreshToken, user } }
+      const payload = response?.data || response;
+      const newAccessToken  = payload?.token;
+      const newRefreshToken = payload?.refreshToken;
+      const updatedUser     = payload?.user;
+
+      if (!newAccessToken) {
+        console.warn('⚠️ Refresh proactif : pas de token dans la réponse');
+        return;
+      }
+
+      // Mettre à jour le localStorage avec les nouveaux tokens
+      const hadAgentToken = !!localStorage.getItem('agentToken');
+      if (hadAgentToken) {
+        localStorage.setItem('agentToken', newAccessToken);
+      } else {
+        localStorage.setItem('token', newAccessToken);
+      }
+      if (newRefreshToken) {
+        localStorage.setItem('refreshToken', newRefreshToken);
+      }
+
+      // Mettre à jour le store si on a les données user
+      if (updatedUser) {
+        login(newAccessToken, updatedUser, newRefreshToken);
+      }
+
+      console.log('✅ Refresh proactif réussi — token renouvelé silencieusement');
+
+    } catch (err) {
+      // Échec silencieux : l'intercepteur 401 prendra le relais
+      // sur la prochaine requête réelle. On ne force pas /login ici
+      // pour ne pas déconnecter l'utilisateur sur simple perte réseau.
+      console.warn('⚠️ Refresh proactif échoué (sera retenté sur la prochaine requête) :', err?.message || err);
+    }
+  }, [login]);
 
   useEffect(() => {
     // Restauration de session (lit le localStorage, ~1ms)
     initAuth();
+
+    // ✅ Écouter le retour au premier plan (PWA, changement d'onglet)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Fermeture du splash natif PWA
     const timer = setTimeout(() => {
@@ -121,8 +202,11 @@ function App() {
       }
     }, 2200);
 
-    return () => clearTimeout(timer);
-  }, [initAuth]);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearTimeout(timer);
+    };
+  }, [initAuth, handleVisibilityChange]);
 
   // ✅ GARDE CRITIQUE — bloquer tout le rendu pendant la restauration
   // Sans ça : React rend les ProtectedRoute avec isAuthenticated=false
@@ -158,9 +242,9 @@ function App() {
             }
           />
 
-          <Route path="/register"          element={<Register />} />
-          <Route path="/login"             element={<Login />} />
-          <Route path="/devenir-revendeur" element={<DevenirRevendeur />} />
+          <Route path="/register"           element={<Register />} />
+          <Route path="/login"              element={<Login />} />
+          <Route path="/devenir-revendeur"  element={<DevenirRevendeur />} />
           <Route path="/register-revendeur" element={<RegisterRevendeur />} />
 
           {/* ========================================= */}

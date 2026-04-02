@@ -2,7 +2,8 @@
 // FICHIER: src/api/apiSwitch.js
 // ✅ Refresh token envoyé dans le body (pas de cookie)
 //    → fiable en cross-domain (fasogaz.onrender.com / fasogaz-backend.onrender.com)
-// ✅ Toutes les corrections originales conservées
+// ✅ CORRECTION BUG 2: lecture de refreshResponse.data.token
+//    (ResponseHandler.success enveloppe les données dans .data)
 // ==========================================
 
 import axios from 'axios';
@@ -16,7 +17,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const userApi = axios.create({
   baseURL:         API_URL,
   headers:         { 'Content-Type': 'application/json' },
-  withCredentials: false, // Plus de cookies — refresh token dans localStorage
+  withCredentials: false,
 });
 
 const adminApi = axios.create({
@@ -121,11 +122,17 @@ userApi.interceptors.response.use(
       }
 
       try {
-        // ✅ Refresh token envoyé dans le body — aucun cookie nécessaire
+        // ✅ Refresh token envoyé dans le body
+        // L'intercepteur retourne déjà response.data (la couche axios est strippée),
+        // donc on reçoit directement { success, message, data: { token, refreshToken, user } }
+        // tel que retourné par ResponseHandler.success côté backend.
         const refreshResponse = await userApi.post('/auth/refresh', { refreshToken });
 
-        const newAccessToken  = refreshResponse.token;
-        const newRefreshToken = refreshResponse.refreshToken;
+        // ✅ CORRECTION BUG 2 : ResponseHandler.success enveloppe dans .data
+        // refreshResponse = { success: true, data: { token, refreshToken, user } }
+        const payload         = refreshResponse?.data || refreshResponse;
+        const newAccessToken  = payload?.token;
+        const newRefreshToken = payload?.refreshToken;
 
         if (!newAccessToken) throw new Error('Pas de token dans la réponse refresh');
 
@@ -205,7 +212,7 @@ export const api = {
     verifyOTP:              (data) => userApi.post('/auth/verify-otp', data),
     resendOTP:              (data) => userApi.post('/auth/resend-otp', data),
     login:                  (data) => userApi.post('/auth/login', data),
-    // ✅ Refresh manuel si besoin (l'intercepteur l'appelle automatiquement)
+    // ✅ Refresh manuel — l'intercepteur l'appelle automatiquement sur 401
     refresh:                (refreshToken) => userApi.post('/auth/refresh', { refreshToken }),
     logout:                 ()     => userApi.post('/auth/logout'),
     getMe:                  ()     => userApi.get('/auth/me'),
